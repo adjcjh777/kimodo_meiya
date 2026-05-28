@@ -34,8 +34,9 @@ COPY kimodo-viser /workspace/kimodo-viser
 COPY MotionCorrection /workspace/MotionCorrection
 
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python -m pip install --upgrade pip \
- && SKIP_MOTION_CORRECTION_IN_SETUP=1 python -m pip install -r docker_requirements.txt
+    python -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple \
+ && python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128 --force-reinstall --timeout 300 --retries 5 \
+ && SKIP_MOTION_CORRECTION_IN_SETUP=1 python -m pip install -r docker_requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple --timeout 120
 
 # Use the docker-entrypoint script, to allow the docker to run as the actual user instead of root
 COPY kimodo/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint

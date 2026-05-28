@@ -13,6 +13,8 @@ services:
       - ${HOME}/.cache/huggingface:/workspace/.cache/huggingface
       # Mount the host HF auth token at the standard cache location in-container.
       - ${HOME}/.cache/huggingface/token:/workspace/.cache/huggingface/token:ro
+      # 使用modelscope需要加一个挂载目录才能读到模型
+      - ${HOME}/.cache/modelscope/hub/models/LLM-Research/Meta-Llama-3-8B-Instruct:/workspace/llama-3-8b-instruct:ro 
     # expose to your host browser
     ports:
       - "9550:9550"
@@ -24,12 +26,13 @@ services:
       # Host user mapping (for non-root ownership + proper shell prompt)
       - HOST_USER=${USER:-user}
 
-      # GPU
-      - NVIDIA_VISIBLE_DEVICES=all
+      # GPU (仅使用 GPU 2，避免与 GPU 0 上的其他任务冲突)
+      - NVIDIA_VISIBLE_DEVICES=2
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
     shm_size: "16gb"
     ipc: host
+    runtime: nvidia
 
     # Wait until Gradio responds on HTTP
     healthcheck:
@@ -38,14 +41,6 @@ services:
       interval: 3s
       timeout: 2s
       retries: 40
-
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
   demo:
     build:
@@ -61,6 +56,8 @@ services:
       - ${HOME}/.cache/huggingface/token:/workspace/.cache/huggingface/token:ro
       # Explicit checkpoint mount (avoids surprises if the repo bind mount isn't what you expect).
       - ./checkpoints:/workspace/checkpoints:ro
+     # 使用modelscope需要加一个挂载目录才能读到模型
+      - ${HOME}/.cache/modelscope/hub/models/LLM-Research/Meta-Llama-3-8B-Instruct:/workspace/llama-3-8b-instruct:ro 
     ports:
       - "${SERVER_PORT:-7860}:${SERVER_PORT:-7860}"
     environment:
@@ -82,11 +79,4 @@ services:
     depends_on:
       text-encoder:
         condition: service_healthy
-
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    runtime: nvidia
