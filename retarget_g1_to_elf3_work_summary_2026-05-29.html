@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>G1 到 ELF3 重定向工作总结 - 2026-05-29</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.6;
+      max-width: 980px;
+      margin: 32px auto;
+      padding: 0 24px 48px;
+      color: #1f2933;
+      background: #ffffff;
+    }
+    h1, h2 {
+      line-height: 1.25;
+      color: #102a43;
+    }
+    code {
+      background: #f0f4f8;
+      border-radius: 4px;
+      padding: 2px 5px;
+    }
+    pre {
+      background: #102a43;
+      color: #f0f4f8;
+      padding: 16px;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+    pre code {
+      background: transparent;
+      padding: 0;
+      color: inherit;
+    }
+    .note {
+      border-left: 4px solid #0b7285;
+      background: #e6f7fb;
+      padding: 12px 16px;
+      margin: 16px 0;
+    }
+    .path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+  </style>
+</head>
+<body>
+  <h1>G1 到 ELF3 重定向工作总结</h1>
+  <p>日期：2026-05-29</p>
+
+  <h2>1. 目标</h2>
+  <p>
+    当前目标是建立一条可重复的动作生成和重定向链路：
+    Kimodo Docker CLI 生成宇树 G1 29DOF 动作，
+    然后将 G1 动作重定向到半醒/BXI ELF3，并批量录制 MuJoCo 视频用于检查。
+  </p>
+
+  <h2>2. 目录整理</h2>
+  <p>
+    顶层 <code>test_retarget_23dof</code> 已经整理进 <code>research</code>，
+    后续重定向相关实验都从 <code>research</code> 进入。
+  </p>
+  <ul>
+    <li><span class="path">research/retarget_23dof_g1</span>：保留 G1 23DOF 的早期验证、示例 NPZ、URDF 和诊断脚本。</li>
+    <li><span class="path">research/retarget_g1_to_elf3</span>：放置当前 G1 生成、G1 原始 MuJoCo 查看、G1 到 ELF3 重定向、ELF3 查看和视频录制工作流。</li>
+  </ul>
+
+  <h2>3. ELF3 资产</h2>
+  <p>
+    已将 ELF3 MJCF 和 STL mesh 资产放到：
+  </p>
+  <pre><code>research/retarget_g1_to_elf3/assets/bxi_elf3</code></pre>
+  <p>
+    资产来源是 mjlab 的 <code>bxi_elf3</code> 目录。ELF3 模型和 Kimodo G1 一样都是
+    <code>7 root + 29 hinge qpos</code>，但不能直接播放，仍然需要按关节语义、root 高度和 joint limit 做重定向。
+  </p>
+
+  <h2>4. Prompt 批量生成</h2>
+  <p>
+    10 条动作 prompt 放在：
+  </p>
+  <pre><code>research/retarget_g1_to_elf3/prompts_10_g1.json</code></pre>
+  <p>
+    批量生成脚本是：
+  </p>
+  <pre><code>research/retarget_g1_to_elf3/generate_g1_prompt_batch.py</code></pre>
+  <p>
+    每条 prompt 默认生成 10 秒动作，Kimodo 模型按 30Hz 输出，即每条动作 300 帧。
+    输出会同时保留 G1 的 <code>.npz</code> 和 <code>.csv</code>。
+  </p>
+
+  <h2>5. G1 到 ELF3 重定向</h2>
+  <p>
+    第一版使用直接语义 qpos 映射，映射文件是：
+  </p>
+  <pre><code>research/retarget_g1_to_elf3/joint_map_g1_to_elf3.json</code></pre>
+  <p>
+    重定向脚本是：
+  </p>
+  <pre><code>research/retarget_g1_to_elf3/retarget_g1_to_elf3_baseline.py</code></pre>
+  <p>
+    输出 ELF3 <code>.npz</code> 中保存 <code>qpos_elf3</code>，
+    同时默认写出 36 列 MuJoCo qpos 顺序的 <code>.csv</code>，便于后续工具兼容。
+  </p>
+
+  <h2>6. 一键工作流</h2>
+  <p>
+    已封装总入口：
+  </p>
+  <pre><code>research/retarget_g1_to_elf3/run_g1_to_elf3_workflow.sh</code></pre>
+  <p>默认执行三步：</p>
+  <ol>
+    <li>通过 Docker Kimodo CLI 生成 G1 动作。</li>
+    <li>将 G1 NPZ 批量重定向到 ELF3 NPZ 和 CSV。</li>
+    <li>批量渲染 ELF3 MP4，并打包 zip。</li>
+  </ol>
+  <pre><code>research/retarget_g1_to_elf3/run_g1_to_elf3_workflow.sh</code></pre>
+
+  <h2>7. 查看和录制</h2>
+  <p>查看原始 G1 动作：</p>
+  <pre><code>python research/retarget_g1_to_elf3/visualize_mujoco_g1.py \
+  research/retarget_g1_to_elf3/generated_g1_10s/walk_forward.npz</code></pre>
+  <p>查看重定向后的 ELF3 动作：</p>
+  <pre><code>python research/retarget_g1_to_elf3/visualize_mujoco_elf3.py \
+  research/retarget_g1_to_elf3/generated_elf3_10s/walk_forward.npz</code></pre>
+  <p>批量录制：</p>
+  <pre><code>python research/retarget_g1_to_elf3/render_elf3_videos.py</code></pre>
+
+  <div class="note">
+    生成动作、ELF3 输出、MP4 和 zip 都属于本地可再生产物，已经通过 <code>.gitignore</code> 排除。
+    代码、prompt、映射、README 和 ELF3 资产保留在版本库中。
+  </div>
+</body>
+</html>

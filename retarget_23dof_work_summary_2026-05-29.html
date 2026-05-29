@@ -122,7 +122,7 @@
     原 visualizer 在 <code>qpos_23dof</code> 为 30 列、模型只要 23 列时直接截断前 23 列，导致 root xyz/quaternion 被当成腿部关节角输入。这是“腿飞到天上”的直接原因之一。
   </div>
   <p>
-    已修复 <code>test_retarget_23dof/visualize_mujoco_23dof.py</code>：当输入是 <code>[T, 30]</code> 而目标模型是 fixed-base 23DOF 时，自动使用 <code>qpos_23dof[:, 7:]</code>。
+    已修复 <code>research/retarget_23dof_g1/visualize_mujoco_23dof.py</code>：当输入是 <code>[T, 30]</code> 而目标模型是 fixed-base 23DOF 时，自动使用 <code>qpos_23dof[:, 7:]</code>。
   </p>
 
   <h2>4. 研究目录与诊断工具</h2>
@@ -152,9 +152,9 @@
 
   <h2>5. 生成的 23DOF 示例</h2>
   <p>
-    生成了 8 个可用于 MuJoCo 查看动作的示例 NPZ，位于 <code>test_retarget_23dof/examples_23dof/</code>。
+    生成了 8 个可用于 MuJoCo 查看动作的示例 NPZ，位于 <code>research/retarget_23dof_g1/examples_23dof/</code>。
   </p>
-  <pre><code>python test_retarget_23dof/visualize_mujoco_23dof.py test_retarget_23dof/examples_23dof/01_single_text_prompt_23dof.npz</code></pre>
+  <pre><code>python research/retarget_23dof_g1/visualize_mujoco_23dof.py research/retarget_23dof_g1/examples_23dof/01_single_text_prompt_23dof.npz</code></pre>
   <p>建议优先查看：</p>
   <ul>
     <li><code>01_single_text_prompt_23dof.npz</code></li>
@@ -169,9 +169,9 @@
 
   <h2>6. MuJoCo 交互启动方式</h2>
   <p>动作播放：</p>
-  <pre><code>python test_retarget_23dof/visualize_mujoco_23dof.py test_retarget_23dof/examples_23dof/01_single_text_prompt_23dof.npz</code></pre>
+  <pre><code>python research/retarget_23dof_g1/visualize_mujoco_23dof.py research/retarget_23dof_g1/examples_23dof/01_single_text_prompt_23dof.npz</code></pre>
   <p>官方静态 viewer：</p>
-  <pre><code>python -m mujoco.viewer --mjcf test_retarget_23dof/g1_23dof_mujoco_viewer.urdf</code></pre>
+  <pre><code>python -m mujoco.viewer --mjcf research/retarget_23dof_g1/g1_23dof_mujoco_viewer.urdf</code></pre>
   <p>
     交互：鼠标左键旋转，鼠标右键平移，滚轮缩放，<code>Space</code> 暂停/继续，<code>ESC</code> 退出。
   </p>

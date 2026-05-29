@@ -2,12 +2,13 @@
 """Generate a test walking motion using Kimodo G1 34-joint model."""
 
 import sys
-import os
+from pathlib import Path
 import numpy as np
 import torch
 
 # Add kimodo to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+REPO_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(REPO_ROOT))
 
 from kimodo.model.loading import load_model
 from kimodo.skeleton import build_skeleton
@@ -50,7 +51,7 @@ def main():
     print(f"  root_positions: {root_positions.shape}")
 
     # Save as Kimodo NPZ
-    output_path = os.path.join(os.path.dirname(__file__), "test_walk_34j.npz")
+    output_path = Path(__file__).with_name("test_walk_34j.npz")
     np.savez(output_path,
              local_rot_mats=local_rot_mats,
              root_positions=root_positions)

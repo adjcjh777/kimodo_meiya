@@ -156,5 +156,15 @@ train_done
 .aider*
 onelogger.err
 
+# Local MuJoCo/Kimodo retargeting outputs
+MUJOCO_LOG.TXT
+/research/retarget_g1_to_elf3/generated_g1_10s/
+/research/retarget_g1_to_elf3/generated_elf3_10s/
+/research/retarget_g1_to_elf3/generated_g1_baseline/
+/research/retarget_g1_to_elf3/generated_elf3_baseline/
+/research/retarget_g1_to_elf3/videos_elf3_10s/
+/research/retarget_g1_to_elf3/videos_elf3_baseline/
+/research/retarget_g1_to_elf3/*.zip
+
 # deploy files
 /helm-library

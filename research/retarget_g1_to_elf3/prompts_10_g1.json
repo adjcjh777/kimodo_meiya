@@ -1,0 +1,52 @@
+[
+  {
+    "action": "walk_forward",
+    "prompt": "a humanoid robot walks forward at a steady pace.",
+    "duration": 10.0
+  },
+  {
+    "action": "turn_left",
+    "prompt": "a humanoid robot turns left while taking small careful steps.",
+    "duration": 10.0
+  },
+  {
+    "action": "turn_right",
+    "prompt": "a humanoid robot turns right while keeping balance.",
+    "duration": 10.0
+  },
+  {
+    "action": "squat_down",
+    "prompt": "a humanoid robot slowly squats down and stands back up.",
+    "duration": 10.0
+  },
+  {
+    "action": "side_step_left",
+    "prompt": "a humanoid robot side steps to the left.",
+    "duration": 10.0
+  },
+  {
+    "action": "side_step_right",
+    "prompt": "a humanoid robot side steps to the right.",
+    "duration": 10.0
+  },
+  {
+    "action": "wave_left_hand",
+    "prompt": "a humanoid robot stands still and waves with the left hand.",
+    "duration": 10.0
+  },
+  {
+    "action": "wave_right_hand",
+    "prompt": "a humanoid robot stands still and waves with the right hand.",
+    "duration": 10.0
+  },
+  {
+    "action": "raise_both_arms",
+    "prompt": "a humanoid robot raises both arms overhead and lowers them.",
+    "duration": 10.0
+  },
+  {
+    "action": "kick_forward",
+    "prompt": "a humanoid robot performs a slow controlled forward kick.",
+    "duration": 10.0
+  }
+]

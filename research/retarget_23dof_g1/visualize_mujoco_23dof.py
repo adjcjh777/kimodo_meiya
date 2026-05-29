@@ -10,12 +10,14 @@ Args:
 
 import argparse
 import os
-import sys
 import time
+from pathlib import Path
 
 import mujoco
 import mujoco.viewer
 import numpy as np
+
+DEFAULT_URDF = Path(__file__).with_name("g1_23dof_mujoco_viewer.urdf")
 
 
 def load_urdf_model(urdf_path: str) -> mujoco.MjModel:
@@ -99,7 +101,7 @@ def main():
     parser.add_argument("motion", help="Path to 23 DOF motion NPZ file")
     parser.add_argument(
         "--urdf",
-        default="/home/chengjunhao/qikorobotagent-import-initial-migration/web/public/robots/unitree/g1_23dof.urdf",
+        default=str(DEFAULT_URDF),
         help="Path to G1 23 DOF URDF file",
     )
     parser.add_argument("--fps", type=float, default=30.0, help="Playback FPS (default: 30)")

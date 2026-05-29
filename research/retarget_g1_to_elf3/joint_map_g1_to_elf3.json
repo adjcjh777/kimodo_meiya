@@ -1,0 +1,51 @@
+{
+  "source": {
+    "robot": "Unitree G1 Kimodo",
+    "xml": "kimodo/assets/skeletons/g1skel34/xml/g1.xml",
+    "qpos": "7 root + 29 hinge joints",
+    "root_body": "pelvis"
+  },
+  "target": {
+    "robot": "BXI ELF3",
+    "xml": "research/retarget_g1_to_elf3/assets/bxi_elf3/xmls/elf3.xml",
+    "qpos": "7 root + 29 hinge joints",
+    "root_body": "torso_link"
+  },
+  "root": {
+    "copy_xyz_xy": true,
+    "copy_quat_wxyz": true,
+    "recommended_initial_z_offset": 0.32,
+    "note": "G1 root is pelvis around z=0.78; ELF3 root is torso with home z=1.1."
+  },
+  "joints": [
+    {"g1": "waist_pitch_joint", "g1_qpos": 21, "elf3": "waist_y_joint", "elf3_qpos": 7, "sign": 1.0, "offset": 0.0},
+    {"g1": "waist_roll_joint", "g1_qpos": 20, "elf3": "waist_x_joint", "elf3_qpos": 8, "sign": 1.0, "offset": 0.0},
+    {"g1": "waist_yaw_joint", "g1_qpos": 19, "elf3": "waist_z_joint", "elf3_qpos": 9, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_hip_pitch_joint", "g1_qpos": 7, "elf3": "l_hip_y_joint", "elf3_qpos": 10, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_hip_roll_joint", "g1_qpos": 8, "elf3": "l_hip_x_joint", "elf3_qpos": 11, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_hip_yaw_joint", "g1_qpos": 9, "elf3": "l_hip_z_joint", "elf3_qpos": 12, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_knee_joint", "g1_qpos": 10, "elf3": "l_knee_y_joint", "elf3_qpos": 13, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_ankle_pitch_joint", "g1_qpos": 11, "elf3": "l_ankle_y_joint", "elf3_qpos": 14, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_ankle_roll_joint", "g1_qpos": 12, "elf3": "l_ankle_x_joint", "elf3_qpos": 15, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_hip_pitch_joint", "g1_qpos": 13, "elf3": "r_hip_y_joint", "elf3_qpos": 16, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_hip_roll_joint", "g1_qpos": 14, "elf3": "r_hip_x_joint", "elf3_qpos": 17, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_hip_yaw_joint", "g1_qpos": 15, "elf3": "r_hip_z_joint", "elf3_qpos": 18, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_knee_joint", "g1_qpos": 16, "elf3": "r_knee_y_joint", "elf3_qpos": 19, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_ankle_pitch_joint", "g1_qpos": 17, "elf3": "r_ankle_y_joint", "elf3_qpos": 20, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_ankle_roll_joint", "g1_qpos": 18, "elf3": "r_ankle_x_joint", "elf3_qpos": 21, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_shoulder_pitch_joint", "g1_qpos": 22, "elf3": "l_shoulder_y_joint", "elf3_qpos": 22, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_shoulder_roll_joint", "g1_qpos": 23, "elf3": "l_shoulder_x_joint", "elf3_qpos": 23, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_shoulder_yaw_joint", "g1_qpos": 24, "elf3": "l_shoulder_z_joint", "elf3_qpos": 24, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_elbow_joint", "g1_qpos": 25, "elf3": "l_elbow_y_joint", "elf3_qpos": 25, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_wrist_roll_joint", "g1_qpos": 26, "elf3": "l_wrist_x_joint", "elf3_qpos": 26, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_wrist_pitch_joint", "g1_qpos": 27, "elf3": "l_wrist_y_joint", "elf3_qpos": 27, "sign": 1.0, "offset": 0.0},
+    {"g1": "left_wrist_yaw_joint", "g1_qpos": 28, "elf3": "l_wrist_z_joint", "elf3_qpos": 28, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_shoulder_pitch_joint", "g1_qpos": 29, "elf3": "r_shoulder_y_joint", "elf3_qpos": 29, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_shoulder_roll_joint", "g1_qpos": 30, "elf3": "r_shoulder_x_joint", "elf3_qpos": 30, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_shoulder_yaw_joint", "g1_qpos": 31, "elf3": "r_shoulder_z_joint", "elf3_qpos": 31, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_elbow_joint", "g1_qpos": 32, "elf3": "r_elbow_y_joint", "elf3_qpos": 32, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_wrist_roll_joint", "g1_qpos": 33, "elf3": "r_wrist_x_joint", "elf3_qpos": 33, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_wrist_pitch_joint", "g1_qpos": 34, "elf3": "r_wrist_y_joint", "elf3_qpos": 34, "sign": 1.0, "offset": 0.0},
+    {"g1": "right_wrist_yaw_joint", "g1_qpos": 35, "elf3": "r_wrist_z_joint", "elf3_qpos": 35, "sign": 1.0, "offset": 0.0}
+  ]
+}
