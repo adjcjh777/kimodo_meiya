@@ -20,9 +20,14 @@ import sys
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 
 DEFAULT_PROMPTS = Path(__file__).with_name("prompts_10_g1.json")
 DEFAULT_OUTPUT_DIR = Path(__file__).with_name("generated_g1_10s")
+REPO_ROOT = Path(__file__).resolve().parents[2]
+DEFAULT_G1_XML = REPO_ROOT / "kimodo" / "assets" / "skeletons" / "g1skel34" / "xml" / "g1.xml"
+DEFAULT_FPS = 30.0
 
 
 def check_generation_environment() -> None:
@@ -65,6 +70,56 @@ def load_prompts(path: Path) -> list[dict[str, Any]]:
     return prompts
 
 
+def load_existing_npz(path: Path) -> dict[str, Any]:
+    with np.load(path, allow_pickle=False) as data:
+        return {key: data[key] for key in data.files}
+
+
+def save_npz_atomic(path: Path, data: dict[str, Any]) -> None:
+    tmp_path = path.with_name(f".{path.name}.tmp.npz")
+    np.savez(tmp_path, **data)
+    os.replace(tmp_path, path)
+
+
+def enrich_generated_g1_npz(path: Path, *, fps: float, g1_xml: Path) -> None:
+    import mujoco
+
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+
+    from research.retarget_g1_to_elf3.retarget_g1_to_elf3_baseline import (
+        ROOT_QPOS_COLUMNS,
+        mjlab_compatible_fields,
+        model_body_names,
+        model_hinge_joint_names,
+    )
+    from research.retarget_g1_to_elf3.visualize_mujoco_g1 import load_qpos36
+
+    model = mujoco.MjModel.from_xml_path(str(g1_xml))
+    qpos = load_qpos36(str(path), str(g1_xml)).astype(np.float32)
+    joint_names = model_hinge_joint_names(model)
+    body_names = model_body_names(model)
+    qpos_columns = (*ROOT_QPOS_COLUMNS, *joint_names)
+
+    data = load_existing_npz(path)
+    data.update(
+        {
+            "qpos_g1": qpos,
+            "qpos_g1_columns": np.array(qpos_columns),
+            "qpos_columns": np.array(qpos_columns),
+            **mjlab_compatible_fields(
+                model,
+                qpos,
+                fps=fps,
+                joint_names=joint_names,
+                body_names=body_names,
+            ),
+        }
+    )
+    save_npz_atomic(path, data)
+    print(f"mjlab npz fields: joint_pos={data['joint_pos'].shape}, body_pos_w={data['body_pos_w'].shape}")
+
+
 def run_generation(
     entry: dict[str, Any],
     *,
@@ -72,6 +127,8 @@ def run_generation(
     model: str,
     diffusion_steps: int,
     seed: int | None,
+    fps: float,
+    g1_xml: Path,
     dry_run: bool,
 ) -> Path:
     output_stem = output_dir / entry["action"]
@@ -102,6 +159,7 @@ def run_generation(
         return output_stem.with_suffix(".npz")
 
     subprocess.run(cmd, check=True)
+    enrich_generated_g1_npz(output_stem.with_suffix(".npz"), fps=fps, g1_xml=g1_xml)
 
     return output_stem.with_suffix(".npz")
 
@@ -113,6 +171,8 @@ def main() -> int:
     parser.add_argument("--model", default="kimodo-g1-rp-v1")
     parser.add_argument("--diffusion-steps", type=int, default=100)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--fps", type=float, default=DEFAULT_FPS, help="FPS metadata used for MJLab-style velocity fields.")
+    parser.add_argument("--g1-xml", type=Path, default=DEFAULT_G1_XML)
     parser.add_argument("--dry-run", action="store_true", help="Print commands without running generation.")
     args = parser.parse_args()
 
@@ -133,6 +193,8 @@ def main() -> int:
                 model=args.model,
                 diffusion_steps=args.diffusion_steps,
                 seed=args.seed,
+                fps=args.fps,
+                g1_xml=args.g1_xml,
                 dry_run=args.dry_run,
             )
         )
@@ -141,6 +203,10 @@ def main() -> int:
     for path in outputs:
         print(f"  {path}")
     print("\nKimodo G1 CSV sidecars are kept next to each NPZ file.")
+    if args.dry_run:
+        print("Dry run only; no files were generated or enriched.")
+    else:
+        print("Each NPZ is enriched in-place with MJLab-style fields and real G1 joint/body names.")
     return 0
 
 

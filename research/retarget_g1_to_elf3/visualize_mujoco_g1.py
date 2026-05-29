@@ -34,6 +34,8 @@ def load_qpos36(npz_path: str, xml_path: str) -> np.ndarray:
 
     if "qpos36" in data:
         qpos = data["qpos36"]
+    elif "qpos_g1" in data:
+        qpos = data["qpos_g1"]
     elif "qpos" in data and data["qpos"].shape[-1] == 36:
         qpos = data["qpos"]
     elif "local_rot_mats" in data and "root_positions" in data:
@@ -44,7 +46,7 @@ def load_qpos36(npz_path: str, xml_path: str) -> np.ndarray:
         qpos = local_rots_to_qpos36(local_rots, root_positions, xml_path)
     else:
         raise ValueError(
-            "Unsupported NPZ. Expected qpos36/qpos, local_rot_mats+root_positions, "
+            "Unsupported NPZ. Expected qpos36/qpos/qpos_g1, local_rot_mats+root_positions, "
             f"or global_rot_mats+posed_joints. Available keys: {list(data.keys())}"
         )
 

@@ -37,8 +37,8 @@ Usage:
   research/retarget_g1_to_elf3/run_g1_to_elf3_workflow.sh [options]
 
 Runs the current G1-to-ELF3 workflow:
-  1. Generate 10-second Unitree G1 motions in Docker.
-  2. Retarget G1 NPZ files to ELF3 NPZ and CSV.
+  1. Generate 10-second Unitree G1 motions in Docker as MJLab-style NPZ plus CSV.
+  2. Retarget G1 NPZ files to MJLab-style ELF3 NPZ plus CSV.
   3. Render ELF3 videos with a farther auto camera.
 
 Options:
@@ -55,7 +55,7 @@ Options:
   --seed N                     Seed for generation.
   --width N                    Render width.
   --height N                   Render height.
-  --fps N                      Render FPS.
+  --fps N                      Generation metadata, retarget velocity, and render FPS.
   --camera NAME                MJCF camera name, or "auto".
   --camera-distance-scale X    Auto camera distance scale.
   --docker-compose-cmd CMD     Docker compose command, e.g. "docker compose".
@@ -252,7 +252,8 @@ if [[ "${SKIP_GENERATE}" -eq 0 ]]; then
       --output-dir "$(to_container_path "${G1_DIR}")" \
       --model "${G1_MODEL}" \
       --diffusion-steps "${DIFFUSION_STEPS}" \
-      --seed "${SEED}"
+      --seed "${SEED}" \
+      --fps "${FPS}"
 else
   echo
   echo "==> Skipping G1 generation"
@@ -263,7 +264,8 @@ if [[ "${SKIP_RETARGET}" -eq 0 ]]; then
   echo "==> Retargeting G1 motions to ELF3"
   "${PYTHON_BIN}" research/retarget_g1_to_elf3/retarget_g1_to_elf3_baseline.py \
     "${G1_DIR}" \
-    -o "${ELF3_DIR}"
+    -o "${ELF3_DIR}" \
+    --fps "${FPS}"
 else
   echo
   echo "==> Skipping ELF3 retargeting"

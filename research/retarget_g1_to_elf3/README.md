@@ -15,6 +15,10 @@ ELF3 CSV:      research/retarget_g1_to_elf3/generated_elf3_10s/*.csv
 默认总脚本会额外录制视频和打包 zip。你如果只需要 `.npz` / `.csv` 动作文件，
 请使用 `--skip-render --no-zip`。
 
+当前工作流会在生成和重定向阶段直接写出同事/MJLab 风格的 `.npz` 字段，
+不需要再额外跑格式转换脚本。`align_npz_to_mjlab_schema.py` 只保留给历史 `.npz`
+手动补齐字段使用，默认工作流不会调用它。
+
 ## 1. 先明确权限和交付方式
 
 GitLab 链接只能提供代码，不能直接访问 5090 服务器上的 Docker 镜像、模型缓存和 checkpoint。
@@ -377,9 +381,9 @@ research/retarget_g1_to_elf3/run_g1_to_elf3_workflow.sh --skip-render --no-zip
 2. 读取 `research/retarget_g1_to_elf3/prompts_10_g1.json`。
 3. 通过 Kimodo CLI 批量生成 10 条 G1 动作。
 4. 每条动作默认 10 秒、30Hz、300 帧。
-5. 保存 G1 `.npz` 和 `.csv`。
+5. 保存带 MJLab 字段和真实 G1 关节/刚体名的 G1 `.npz`，同时保留 `.csv`。
 6. 将 G1 动作重定向到 ELF3。
-7. 保存 ELF3 `.npz` 和 `.csv`。
+7. 保存带 MJLab 字段和真实 ELF3 关节/刚体名的 ELF3 `.npz`，同时保留 `.csv`。
 8. 不录制视频，不生成 zip。
 
 输出位置：
@@ -474,7 +478,7 @@ text encoder 首次加载 LLM2Vec/Llama 相关模型会比较慢，当前脚本�
 
 ```bash
 sudo docker compose run --rm --no-deps demo \
-  python research/retarget_g1_to_elf3/generate_g1_prompt_batch.py
+  python research/retarget_g1_to_elf3/generate_g1_prompt_batch.py --fps 30
 ```
 
 只打印命令、不真正生成：
@@ -556,13 +560,37 @@ research/retarget_g1_to_elf3/generated_elf3_10s/<action>.npz
 research/retarget_g1_to_elf3/generated_elf3_10s/<action>.csv
 ```
 
-ELF3 `.npz` 里主要字段：
+G1 和 ELF3 `.npz` 都会直接包含同事/MJLab 风格字段：
 
 ```text
-qpos_elf3:  [T, 36]，ELF3 MuJoCo qpos
-qpos_g1:    [T, 36]，转换后的 G1 qpos
-source_file: 来源 G1 文件
-joint_map:  使用的 G1->ELF3 关节映射
+fps:             [1]，帧率，例如 30.0
+joint_pos:       [T, 29]，29 个关节位置
+joint_vel:       [T, 29]，29 个关节速度
+body_pos_w:      [T, 30, 3]，去掉 world 后的 30 个刚体世界坐标
+body_quat_w:     [T, 30, 4]，去掉 world 后的 30 个刚体世界四元数
+body_lin_vel_w:  [T, 30, 3]，刚体世界线速度
+body_ang_vel_w:  [T, 30, 3]，刚体世界角速度
+joint_names:     [29]，MJCF 里的真实关节名，顺序与 joint_pos 对齐
+body_names:      [30]，MJCF 里的真实刚体名，顺序与 body_pos_w/body_quat_w 对齐
+```
+
+G1 `.npz` 额外保留：
+
+```text
+qpos_g1:          [T, 36]，G1 MuJoCo qpos
+qpos_g1_columns:  [36]，G1 qpos 列名
+qpos_columns:     [36]，与 qpos_g1_columns 相同，便于通用读取
+```
+
+ELF3 `.npz` 额外保留：
+
+```text
+qpos_elf3:          [T, 36]，ELF3 MuJoCo qpos
+qpos_g1:            [T, 36]，来源 G1 qpos
+qpos_elf3_columns:  [36]，ELF3 qpos 列名
+qpos_columns:       [36]，与 qpos_elf3_columns 相同，便于通用读取
+source_file:        来源 G1 文件
+joint_map:          使用的 G1->ELF3 关节映射
 ```
 
 ELF3 CSV 是 36 列 MuJoCo qpos，列顺序：
@@ -576,6 +604,17 @@ r_hip_y, r_hip_x, r_hip_z, r_knee_y, r_ankle_y, r_ankle_x,
 l_shoulder_y, l_shoulder_x, l_shoulder_z, l_elbow_y, l_wrist_x, l_wrist_y, l_wrist_z,
 r_shoulder_y, r_shoulder_x, r_shoulder_z, r_elbow_y, r_wrist_x, r_wrist_y, r_wrist_z
 ```
+
+如果手上已经有旧格式 `.npz`，可以手动补齐字段：
+
+```bash
+python research/retarget_g1_to_elf3/align_npz_to_mjlab_schema.py \
+  research/retarget_g1_to_elf3/generated_elf3_10s \
+  --robot elf3 \
+  --fps 30
+```
+
+这一步只用于历史数据迁移；默认 `run_g1_to_elf3_workflow.sh` 不会调用它。
 
 ## 12. 常见问题和踩坑记录
 
