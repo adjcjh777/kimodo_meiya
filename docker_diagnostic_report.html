@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kimodo Docker 配置诊断报告</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 960px; margin: 40px auto; padding: 0 20px; color: #1a1a1a; line-height: 1.6; }
+  h1 { border-bottom: 3px solid #76b900; padding-bottom: 12px; color: #1a1a1a; }
+  h2 { color: #2d5f2d; margin-top: 36px; border-left: 4px solid #76b900; padding-left: 12px; }
+  h3 { color: #444; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 13px; font-weight: 600; }
+  .badge-fail { background: #fde8e8; color: #c53030; }
+  .badge-pass { background: #e6ffed; color: #22543d; }
+  .badge-fix { background: #fefcbf; color: #975a16; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+  code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+  .card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px; margin: 16px 0; background: #fafafa; }
+  .card-root { border-left: 4px solid #c53030; background: #fff5f5; }
+  .card-fix { border-left: 4px solid #76b900; background: #f0fff4; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th, td { border: 1px solid #ddd; padding: 10px 14px; text-align: left; }
+  th { background: #f5f5f5; font-weight: 600; }
+  .timeline { position: relative; padding-left: 30px; }
+  .timeline::before { content: ''; position: absolute; left: 10px; top: 0; bottom: 0; width: 2px; background: #ddd; }
+  .step { position: relative; margin-bottom: 24px; }
+  .step::before { content: ''; position: absolute; left: -24px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: #76b900; border: 2px solid #fff; }
+  .step.fail::before { background: #c53030; }
+  .step.key::before { background: #d69e2e; width: 14px; height: 14px; left: -25px; }
+  .env-var { font-family: monospace; color: #2d5f2d; font-weight: bold; }
+  .highlight { background: #fffde7; padding: 2px 4px; }
+  .summary-box { background: linear-gradient(135deg, #f0fff4, #e6ffed); border: 2px solid #76b900; border-radius: 12px; padding: 24px; margin: 24px 0; }
+  .timestamp { color: #888; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<h1>Kimodo Docker 配置诊断报告</h1>
+<p class="timestamp">日期: 2026-05-28 &nbsp;|&nbsp; 环境: RTX 5090 x8, NVIDIA Driver 575.64.03, CUDA 12.9</p>
+
+<div class="summary-box">
+  <h2 style="border:none;padding:0;margin-top:0;">问题总结</h2>
+  <p><strong>现象：</strong><code>docker compose up</code> 启动 text-encoder 容器时，健康检查失败，demo 容器无法启动。</p>
+  <p><strong>根因：</strong>Docker entrypoint 脚本根据 <code>/workspace</code> 目录的 UID/GID 切换到非 root 用户运行。宿主机目录挂载到 <code>/workspace</code> 后，UID 变为普通用户，该用户无权访问 <code>/dev/nvidia*</code> GPU 设备，导致 PyTorch 的 CUDA 初始化失败。</p>
+  <p><strong>修复：</strong>在 docker-compose.yaml 中设置 <span class="env-var">HOST_UID=0</span>、<span class="env-var">HOST_GID=0</span>，强制以 root 运行。</p>
+</div>
+
+<h2>一、环境信息</h2>
+<table>
+  <tr><th>项目</th><th>值</th></tr>
+  <tr><td>GPU</td><td>NVIDIA GeForce RTX 5090 x 8</td></tr>
+  <tr><td>驱动版本</td><td>575.64.03</td></tr>
+  <tr><td>CUDA 版本</td><td>12.9</td></tr>
+  <tr><td>PyTorch 镜像</td><td>nvcr.io/nvidia/pytorch:24.10-py3 (PyTorch 2.11.0+cu128)</td></tr>
+  <tr><td>Docker Runtime</td><td>nvidia (runtime: nvidia)</td></tr>
+  <tr><td>系统内存</td><td>1.0 TiB</td></tr>
+</table>
+
+<h2>二、遇到的问题列表</h2>
+<table>
+  <tr><th>#</th><th>问题</th><th>状态</th></tr>
+  <tr><td>1</td><td>健康检查超时 — text-encoder 未在 120 秒内启动</td><td><span class="badge badge-fix">已修复</span></td></tr>
+  <tr><td>2</td><td>容器无法访问 huggingface.co — 模型加载卡死</td><td><span class="badge badge-fix">已修复</span></td></tr>
+  <tr><td>3</td><td>容器退出码 137 (OOM/SIGKILL)</td><td><span class="badge badge-fix">已修复</span></td></tr>
+  <tr><td>4</td><td>CUDA 不可用 — GPU 设备访问权限问题</td><td><span class="badge badge-fix">已修复</span></td></tr>
+</table>
+
+<h2>三、问题 #1：健康检查超时</h2>
+
+<div class="card">
+<h3>现象</h3>
+<pre>dependency failed to start: container text-encoder is unhealthy</pre>
+<p>text-encoder 容器启动后，健康检查在模型加载完成前就判定失败。</p>
+</div>
+
+<div class="card card-root">
+<h3>根因</h3>
+<p>原始健康检查配置：<code>interval: 3s, retries: 40</code>，总计等待 120 秒。LLM2Vec-Llama-3-8B 模型加载需要 3-5 分钟，远超此限制。</p>
+</div>
+
+<div class="card card-fix">
+<h3>修复</h3>
+<pre>healthcheck:
+  interval: 10s
+  timeout: 5s
+  retries: 60
+  start_period: 300s    # 新增：5 分钟宽限期</pre>
+</div>
+
+<h2>四、问题 #2：容器无法访问外网</h2>
+
+<div class="card">
+<h3>现象</h3>
+<pre>text-encoder 容器状态: health: starting（持续数分钟）
+容器内 curl https://huggingface.co → 超时
+容器内存: 508 MiB（模型未加载到 GPU）</pre>
+<p>进程在运行（CPU 17%），但模型没有加载到 GPU，无任何日志输出。</p>
+</div>
+
+<div class="card card-root">
+<h3>根因</h3>
+<p>Docker 容器网络无法访问 huggingface.co。<code>LLM2Vec.from_pretrained()</code> 即使模型已缓存本地，仍会尝试联网检查更新，导致进程卡死在网络请求上。</p>
+</div>
+
+<div class="card card-fix">
+<h3>修复</h3>
+<p>在 docker-compose.yaml 的 environment 中添加：</p>
+<pre>- HF_HUB_OFFLINE=1
+- TRANSFORMERS_OFFLINE=1</pre>
+<p>强制离线模式，使用本地缓存。</p>
+</div>
+
+<h2>五、问题 #3：容器退出码 137</h2>
+
+<div class="card">
+<h3>现象</h3>
+<pre>text-encoder exited with code 137</pre>
+</div>
+
+<div class="card card-root">
+<h3>根因</h3>
+<p>退出码 137 = 128 + 9 (SIGKILL)。在问题 #2 修复前，模型加载卡死导致容器被系统回收。修复离线模式后此问题消失。</p>
+</div>
+
+<h2>六、问题 #4：CUDA 不可用（核心问题）</h2>
+
+<div class="card card-root">
+<h3>现象</h3>
+<pre>RuntimeError: No CUDA GPUs are available
+UserWarning: Can't initialize NVML</pre>
+<p>即使模型成功加载到 CPU（17 GiB 内存），移动到 GPU 时 CUDA 初始化失败。</p>
+</div>
+
+<h3>排查过程</h3>
+
+<div class="timeline">
+
+<div class="step fail">
+<strong>Step 1：怀疑 NVIDIA_VISIBLE_DEVICES 配置</strong><br>
+<code>NVIDIA_VISIBLE_DEVICES=1</code> → CUDA: False<br>
+<code>NVIDIA_VISIBLE_DEVICES=all</code> → CUDA: True<br>
+结论：指定单卡索引会导致 NVML 初始化失败（5090 驱动兼容性问题）。
+</div>
+
+<div class="step fail">
+<strong>Step 2：怀疑 CUDA_VISIBLE_DEVICES</strong><br>
+<code>NVIDIA_VISIBLE_DEVICES=all + CUDA_VISIBLE_DEVICES=1</code> → CUDA: True（小张量测试）<br>
+结论：CUDA_VISIBLE_DEVICES 本身没问题。
+</div>
+
+<div class="step fail">
+<strong>Step 3：怀疑 HuggingFace 环境变量</strong><br>
+<code>+HF_HUB_OFFLINE=1 +TRANSFORMERS_OFFLINE=1</code> → CUDA: True<br>
+结论：环境变量不影响 CUDA。
+</div>
+
+<div class="step key">
+<strong>Step 4：定位到 volume 挂载</strong><br>
+<code>docker run --rm --runtime=nvidia kimodo:1.0 python -c "..."</code> → CUDA: True<br>
+<code>docker run --rm --runtime=nvidia -v $HOME/kimodo:/workspace ...</code> → CUDA: False<br>
+<code>docker run --rm --runtime=nvidia -v $HOME/kimodo:/workspace2 ...</code> → CUDA: True<br>
+<mark>挂载任意目录到 /workspace 导致 CUDA 失败！</mark>
+</div>
+
+<div class="step key">
+<strong>Step 5：定位到 entrypoint 脚本</strong><br>
+<code>--entrypoint python</code>（跳过 entrypoint）→ CUDA: True<br>
+问题出在 <code>/usr/local/bin/docker-entrypoint</code> 脚本。
+</div>
+
+<div class="step key">
+<strong>Step 6：确认根因 — UID/GID 权限问题</strong><br>
+entrypoint 脚本逻辑：<br>
+<pre>HOST_UID="$(stat -c %u /workspace)"  # 读取挂载目录的 UID
+HOST_GID="$(stat -c %g /workspace)"
+useradd -m -u "$HOST_UID" -g "$HOST_GID" "$HOST_USER"
+exec gosu "$HOST_UID:$HOST_GID" "$@"   # 切换到该用户运行</pre>
+<p>宿主机目录 UID=1021（普通用户），容器内创建的用户无权访问 <code>/dev/nvidia*</code> 设备。</p>
+验证：<br>
+<code>-e HOST_UID=0 -e HOST_GID=0</code> → <span class="badge badge-pass">CUDA: True</span>
+</div>
+
+</div>
+
+<div class="card card-fix">
+<h3>最终修复</h3>
+<p>在 docker-compose.yaml 的两个 service 中均添加：</p>
+<pre># 以 root 运行，确保 GPU 设备访问权限
+- HOST_UID=0
+- HOST_GID=0
+- HOST_USER=root</pre>
+</div>
+
+<h2>七、最终 docker-compose.yaml 关键配置</h2>
+<pre>environment:
+  - HF_HOME=/workspace/.cache/huggingface
+  - HF_HUB_OFFLINE=1              # 离线模式
+  - TRANSFORMERS_OFFLINE=1        # 离线模式
+  - TEXT_ENCODER_DEVICE=cuda       # 强制 CUDA
+  - HOST_UID=0                     # root 用户
+  - HOST_GID=0
+  - HOST_USER=root
+  - NVIDIA_VISIBLE_DEVICES=all     # 可见所有 GPU
+  - CUDA_VISIBLE_DEVICES=1         # 使用 GPU 1
+  - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+healthcheck:
+  interval: 10s
+  timeout: 5s
+  retries: 60
+  start_period: 300s               # 5 分钟宽限期</pre>
+
+<h2>八、经验总结</h2>
+<ol>
+  <li><strong>entrypoint 用户切换需谨慎：</strong>当使用 volume 挂载宿主机目录时，目录的 UID/GID 会被传递到容器内。如果 entrypoint 依赖此信息切换用户，需要确保该用户有 GPU 设备访问权限。</li>
+  <li><strong>离线模式：</strong>容器内无法访问外网时，必须设置 <code>HF_HUB_OFFLINE=1</code>，否则 HuggingFace 模型加载会卡死。</li>
+  <li><strong>健康检查宽限期：</strong>大模型加载需要较长时间，健康检查应设置足够的 <code>start_period</code>。</li>
+  <li><strong>NVIDIA_VISIBLE_DEVICES 指定单卡索引：</strong>在某些 5090 驱动版本下会导致 NVML 初始化失败，建议用 <code>NVIDIA_VISIBLE_DEVICES=all</code> + <code>CUDA_VISIBLE_DEVICES</code> 替代。</li>
+</ol>
+
+<p class="timestamp" style="margin-top:40px; text-align:center; color:#aaa;">报告生成于 2026-05-28</p>
+
+</body>
+</html>

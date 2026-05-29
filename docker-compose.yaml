@@ -23,11 +23,18 @@ services:
       # - GRADIO_SERVER_NAME=0.0.0.0
       # - GRADIO_SERVER_PORT=9550
       - HF_HOME=/workspace/.cache/huggingface
-      # Host user mapping (for non-root ownership + proper shell prompt)
-      - HOST_USER=${USER:-user}
+      # 强制离线模式，避免卡在网络请求
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      - TEXT_ENCODER_DEVICE=cuda
+      # 以 root 运行，确保 GPU 设备访问权限
+      - HOST_UID=0
+      - HOST_GID=0
+      - HOST_USER=root
 
-      # GPU (仅使用 GPU 2，避免与 GPU 0 上的其他任务冲突)
-      - NVIDIA_VISIBLE_DEVICES=2
+      # GPU (使用 GPU 1)
+      - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=1
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
     shm_size: "16gb"
@@ -38,9 +45,10 @@ services:
     healthcheck:
       test:
         ["CMD", "bash", "-lc", "curl -fsS http://localhost:9550/ > /dev/null"]
-      interval: 3s
-      timeout: 2s
-      retries: 40
+      interval: 10s
+      timeout: 5s
+      retries: 60
+      start_period: 300s
 
   demo:
     build:
@@ -66,17 +74,27 @@ services:
       # Make checkpoint paths robust (Hydra config reads this).
       - SERVER_PORT=${SERVER_PORT:-7860}
       - HF_HOME=/workspace/.cache/huggingface
-      # Host user mapping (for non-root ownership + proper shell prompt)
-      - HOST_USER=${USER:-user}
+      # 强制离线模式，避免卡在网络请求
+      - HF_HUB_OFFLINE=1
+      - TRANSFORMERS_OFFLINE=1
+      # 使用本地 HuggingFace 缓存
+      - LOCAL_CACHE=true
+      # 使用本地 checkpoint 目录
+      - CHECKPOINT_DIR=/workspace/checkpoints
+      # 以 root 运行，确保 GPU 设备访问权限
+      - HOST_UID=0
+      - HOST_GID=0
+      - HOST_USER=root
 
-      # GPU
+      # GPU (使用 GPU 0)
       - NVIDIA_VISIBLE_DEVICES=all
+      - CUDA_VISIBLE_DEVICES=0
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
 
     shm_size: "16gb"
     ipc: host
+    runtime: nvidia
 
     depends_on:
       text-encoder:
         condition: service_healthy
-    runtime: nvidia

@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kimodo 项目周报 - 2026/05/26-05/28</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            color: #667eea;
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        .header .date {
+            color: #666;
+            font-size: 16px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+        }
+
+        .card h2 {
+            color: #764ba2;
+            font-size: 24px;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        .card h3 {
+            color: #667eea;
+            font-size: 18px;
+            margin: 20px 0 10px 0;
+        }
+
+        .work-item {
+            background: #f8f9ff;
+            border-left: 4px solid #667eea;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 8px;
+        }
+
+        .work-item h4 {
+            color: #764ba2;
+            font-size: 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .work-item p {
+            color: #555;
+            line-height: 1.6;
+            margin: 5px 0;
+        }
+
+        .work-item .tag {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            margin-right: 8px;
+        }
+
+        .work-item .tag.fix {
+            background: #f56565;
+        }
+
+        .work-item .tag.feature {
+            background: #48bb78;
+        }
+
+        .work-item .tag.research {
+            background: #ed8936;
+        }
+
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+
+        .file-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .file-list li {
+            padding: 10px;
+            margin: 5px 0;
+            background: #f7fafc;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-list li::before {
+            content: "📄";
+            font-size: 18px;
+        }
+
+        .file-modified {
+            color: #ed8936;
+            font-weight: bold;
+        }
+
+        .file-new {
+            color: #48bb78;
+            font-weight: bold;
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: #667eea;
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 25px;
+            background: #f8f9ff;
+            padding: 15px 20px;
+            border-radius: 8px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -26px;
+            top: 20px;
+            width: 12px;
+            height: 12px;
+            background: #764ba2;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 0 0 3px #667eea;
+        }
+
+        .timeline-date {
+            color: #667eea;
+            font-weight: bold;
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .summary-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .summary-box .number {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .summary-box .label {
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .issue-solution {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin: 15px 0;
+        }
+
+        .issue-box {
+            background: #fed7d7;
+            border-left: 4px solid #f56565;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .solution-box {
+            background: #c6f6d5;
+            border-left: 4px solid #48bb78;
+            padding: 15px;
+            border-radius: 8px;
+        }
+
+        .issue-box h5, .solution-box h5 {
+            font-size: 14px;
+            margin-bottom: 8px;
+            color: #2d3748;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Kimodo 项目周报</h1>
+            <div class="date">📅 2026年5月26日 - 5月28日 | 📍 /home/chengjunhao/kimodo</div>
+        </div>
+
+        <div class="summary-grid">
+            <div class="summary-box">
+                <div class="number">5</div>
+                <div class="label">会话数</div>
+            </div>
+            <div class="summary-box">
+                <div class="number">2</div>
+                <div class="label">修改文件</div>
+            </div>
+            <div class="summary-box">
+                <div class="number">2</div>
+                <div class="label">新增目录</div>
+            </div>
+            <div class="summary-box">
+                <div class="number">3</div>
+                <div class="label">主要问题</div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-top: 30px;">
+            <h2>📋 本周工作概览</h2>
+            <p style="color: #555; line-height: 1.8;">
+                本周主要聚焦于 <strong>Kimodo Docker 环境的部署与调试</strong>，解决了 RTX 5090 GPU 兼容性问题、
+                文本编码器服务启动失败、ModelScope 模型集成等关键问题。同时研究了动作捕捉数据在项目中的应用方案。
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>🔧 主要工作内容</h2>
+
+            <div class="work-item">
+                <h4>
+                    <span class="tag fix">问题修复</span>
+                    RTX 5090 GPU 架构兼容性修复
+                </h4>
+                <p><strong>问题：</strong>RTX 5090 采用 Blackwell 架构 (sm_120)，而容器中的 PyTorch 2.5 (来自 nvcr.io/nvidia/pytorch:24.10-py3) 最高只支持到 sm_90，导致 CUDA kernel 无法执行。</p>
+                <p><strong>解决方案：</strong>在 Dockerfile 中强制升级 PyTorch 到支持 cu126 的版本</p>
+                <div class="code-block">
+python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu126 --force-reinstall
+                </div>
+            </div>
+
+            <div class="work-item">
+                <h4>
+                    <span class="tag fix">问题修复</span>
+                    Text Encoder 服务启动失败
+                </h4>
+                <p><strong>问题：</strong>healthcheck 在模型加载完成前就超时，容器状态为 Created 但未启动</p>
+                <p><strong>根因：</strong>GPU 显存占用过高 (GPU 0: 16969MiB/100%)，模型加载缓慢</p>
+                <p><strong>解决方案：</strong>调整 docker-compose.yaml 中的 GPU 配置和模型挂载路径</p>
+            </div>
+
+            <div class="work-item">
+                <h4>
+                    <span class="tag feature">功能增强</span>
+                    ModelScope 模型集成
+                </h4>
+                <p><strong>改动：</strong>在 docker-compose.yaml 中添加 ModelScope 模型挂载</p>
+                <div class="code-block">
+volumes:
+  - ${HOME}/.cache/modelscope/hub/models/LLM-Research/Meta-Llama-3-8B-Instruct:/workspace/llama-3-8b-instruct:ro
+                </div>
+                <p><strong>目的：</strong>支持使用国内 ModelScope 镜像源下载和加载 LLM 模型</p>
+            </div>
+
+            <div class="work-item">
+                <h4>
+                    <span class="tag research">技术研究</span>
+                    动作捕捉数据集成方案
+                </h4>
+                <p><strong>研究内容：</strong>如何将场地动捕摄像头收集的数据转换为项目可用的运动约束</p>
+                <p><strong>方案：</strong>将动捕数据转换为 BVH 格式，提取关键帧作为 Full-Body 约束输入</p>
+                <div class="code-block">
+from kimodo.skeleton.bvh import Bvh
+with open("mocap_data.bvh") as f:
+    bvh = Bvh(f.read())
+                </div>
+            </div>
+
+            <div class="work-item">
+                <h4>
+                    <span class="tag research">技术研究</span>
+                    格式转换工作流探索
+                </h4>
+                <p><strong>分析了项目中的运动格式转换架构：</strong></p>
+                <ul style="margin-left: 20px; margin-top: 10px; color: #555;">
+                    <li>scripts/motion_convert.py — CLI 入口层</li>
+                    <li>exports/motion_convert_lib.py — 核心转换逻辑</li>
+                    <li>支持格式：BVH, SMPL, SMPL-X 等</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📁 文件变更清单</h2>
+            <ul class="file-list">
+                <li>
+                    <span class="file-modified">已修改</span>
+                    <strong>Dockerfile</strong> — 添加 PyTorch cu126 升级指令以支持 RTX 5090
+                </li>
+                <li>
+                    <span class="file-modified">已修改</span>
+                    <strong>docker-compose.yaml</strong> — 调整 GPU 运行时配置、添加 ModelScope 模型挂载
+                </li>
+                <li>
+                    <span class="file-new">新增目录</span>
+                    <strong>checkpoints/</strong> — 存放 Kimodo-G1-RP-v1 模型检查点
+                </li>
+                <li>
+                    <span class="file-new">新增目录</span>
+                    <strong>kimodo-viser/</strong> — 可视化相关资源（包含文档、示例、测试等）
+                </li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>🐛 遇到的问题与解决方案</h2>
+
+            <div class="issue-solution">
+                <div class="issue-box">
+                    <h5>⚠️ 问题 1: CUDA 架构不兼容</h5>
+                    <p style="font-size: 14px; color: #555;">RTX 5090 (sm_120) 与 PyTorch 2.5 不兼容，无法执行 CUDA 操作</p>
+                </div>
+                <div class="solution-box">
+                    <h5>✅ 解决方案</h5>
+                    <p style="font-size: 14px; color: #555;">升级到支持 cu126 的 PyTorch 版本</p>
+                </div>
+            </div>
+
+            <div class="issue-solution">
+                <div class="issue-box">
+                    <h5>⚠️ 问题 2: 服务启动超时</h5>
+                    <p style="font-size: 14px; color: #555;">Text encoder 加载缓慢，healthcheck 在模型就绪前超时</p>
+                </div>
+                <div class="solution-box">
+                    <h5>✅ 解决方案</h5>
+                    <p style="font-size: 14px; color: #555;">优化 GPU 资源配置，调整容器运行时参数</p>
+                </div>
+            </div>
+
+            <div class="issue-solution">
+                <div class="issue-box">
+                    <h5>⚠️ 问题 3: 模型加载路径</h5>
+                    <p style="font-size: 14px; color: #555;">容器内无法访问 ModelScope 缓存的模型文件</p>
+                </div>
+                <div class="solution-box">
+                    <h5>✅ 解决方案</h5>
+                    <p style="font-size: 14px; color: #555;">在 docker-compose 中添加只读挂载卷</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>📅 工作时间线</h2>
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-date">5月26日 上午</div>
+                    <p><strong>Docker 环境调研</strong></p>
+                    <p style="color: #555; font-size: 14px;">了解 Docker 镜像存储位置，探索容器配置</p>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-date">5月26日 下午</div>
+                    <p><strong>容器部署与调试</strong></p>
+                    <p style="color: #555; font-size: 14px;">启动 demo 和 text-encoder 容器，排查启动失败原因</p>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-date">5月26日 下午</div>
+                    <p><strong>文本编码器研究</strong></p>
+                    <p style="color: #555; font-size: 14px;">分析 LLM2Vec 实现，研究 ModelScope 替代模型方案</p>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-date">5月28日 上午</div>
+                    <p><strong>GPU 兼容性问题诊断</strong></p>
+                    <p style="color: #555; font-size: 14px;">定位 RTX 5090 Blackwell 架构与 PyTorch 版本不兼容问题</p>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-date">5月28日 上午</div>
+                    <p><strong>Dockerfile 修复</strong></p>
+                    <p style="color: #555; font-size: 14px;">修改 Dockerfile，升级 PyTorch 以支持新架构</p>
+                </div>
+
+                <div class="timeline-item">
+                    <div class="timeline-date">5月28日 上午</div>
+                    <p><strong>动作捕捉数据集成研究</strong></p>
+                    <p style="color: #555; font-size: 14px;">探索 BVH 格式转换和运动约束应用方案</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>💡 技术要点总结</h2>
+
+            <h3>1. RTX 5090 架构特性</h3>
+            <p style="color: #555; line-height: 1.8;">
+                RTX 5090 采用 Blackwell 架构 (compute capability 12.0)，需要 PyTorch 2.6+ 或 cu126 版本才能支持。
+                旧版本 PyTorch 最高只支持到 sm_90 (Hopper 架构)。
+            </p>
+
+            <h3>2. Kimodo 文本编码器架构</h3>
+            <p style="color: #555; line-height: 1.8;">
+                项目使用 LLM2Vec 包装器将 LLM 转换为文本编码器，基于 Meta-Llama-3-8B-Instruct 模型。
+                文本编码器作为独立服务运行在 9550 端口，通过 API 提供给主 demo 服务调用。
+            </p>
+
+            <h3>3. 运动数据转换流程</h3>
+            <p style="color: #555; line-height: 1.8;">
+                项目支持多种运动数据格式 (BVH, SMPL, SMPL-X)，通过 CLI 工具和转换库实现格式间的互操作。
+                动捕数据可以转换为 BVH 后，提取关键帧作为全身约束输入到生成模型。
+            </p>
+        </div>
+
+        <div class="card">
+            <h2>📊 当前状态</h2>
+            <div style="background: #f0fff4; padding: 20px; border-radius: 8px; border-left: 4px solid #48bb78;">
+                <p style="color: #555; line-height: 1.8;">
+                    <strong>✅ Docker 镜像：</strong>kimodo:1.0 (22.7GB) 已构建<br>
+                    <strong>✅ 基础模型：</strong>Meta-Llama-3-8B-Instruct 在 ModelScope 缓存中<br>
+                    <strong>✅ 模型检查点：</strong>Kimodo-G1-RP-v1 在 checkpoints/ 目录<br>
+                    <strong>⏳ 待验证：</strong>使用新 PyTorch 版本重新构建镜像后测试服务启动
+                </p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Generated by Claude Code | Kimodo Project Weekly Report</p>
+            <p>报告生成时间：2026-05-28 10:55</p>
+        </div>
+    </div>
+</body>
+</html>

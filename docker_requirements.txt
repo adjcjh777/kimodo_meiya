@@ -7,7 +7,7 @@
     # via -r docker_requirements.in
 -e ./kimodo-viser
     # via -r docker_requirements.in
-py-soma-x @ git+https://github.com/NVlabs/SOMA-X.git
+py-soma-x==0.1.0
     # via -r docker_requirements.in
 accelerate==1.13.0
     # via peft

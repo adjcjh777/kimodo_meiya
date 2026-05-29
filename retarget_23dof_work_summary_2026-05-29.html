@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kimodo 23DOF G1 重定向与环境修复总结</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+      line-height: 1.6;
+      color: #1f2933;
+      background: #f5f7fa;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+      background: #ffffff;
+      min-height: 100vh;
+    }
+    h1, h2, h3 {
+      line-height: 1.25;
+      color: #102a43;
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 30px;
+      border-bottom: 3px solid #2f80ed;
+      padding-bottom: 16px;
+    }
+    h2 {
+      margin-top: 32px;
+      font-size: 22px;
+    }
+    h3 {
+      margin-top: 24px;
+      font-size: 18px;
+    }
+    code {
+      background: #eef2f7;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: Consolas, Monaco, monospace;
+    }
+    pre {
+      background: #102a43;
+      color: #f0f4f8;
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+    }
+    .meta {
+      color: #52606d;
+      margin-bottom: 28px;
+    }
+    .callout {
+      border-left: 4px solid #2f80ed;
+      background: #eef6ff;
+      padding: 12px 16px;
+      margin: 18px 0;
+    }
+    .warning {
+      border-left-color: #d97706;
+      background: #fff7ed;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 14px;
+    }
+    th, td {
+      border: 1px solid #d9e2ec;
+      padding: 8px 10px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f0f4f8;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Kimodo 23DOF G1 重定向与环境修复总结</h1>
+  <p class="meta">
+    日期：2026-05-29<br>
+    分支：<code>kimodo-init-5090</code><br>
+    基准提交：<code>097442e fix: add RTX 5090 support and optimize docker configuration</code>
+  </p>
+
+  <div class="callout">
+    本轮工作的核心目标是验证：Kimodo 34DOF/34-joint G1 生成动作，是否可以降维后驱动 23DOF Unitree G1 骨架，并能在 MuJoCo 中正常查看。
+  </div>
+
+  <h2>1. Docker 与本地运行环境</h2>
+  <ul>
+    <li>调整 <code>docker-compose.yaml</code>，让 demo 和 text encoder 服务更适配本地 GPU 调试。</li>
+    <li>加入 HuggingFace/Transformers 离线环境变量，避免容器启动时卡在外网请求。</li>
+    <li>为 text encoder 和 demo 服务分别设置 CUDA 可见设备，便于在多 GPU 机器上拆分运行。</li>
+    <li>延长 text encoder 健康检查窗口，降低模型加载时间较长时误判失败的概率。</li>
+    <li>将 <code>docker_requirements.txt</code> 中 <code>py-soma-x</code> 从 Git 安装改为固定版本安装，降低构建时网络依赖。</li>
+  </ul>
+
+  <h2>2. G1 23DOF 重定向脚本</h2>
+  <p>
+    新增 <code>kimodo/scripts/retarget_g1_23dof.py</code>，用于将 Kimodo G1 34-joint / 29-DOF 输出转换为 23DOF G1 qpos。
+  </p>
+  <ul>
+    <li>保留 root 7 列：<code>xyz + quat(wxyz)</code>。</li>
+    <li>保留双腿 12 个关节、腰 yaw、左右手臂各 5 个关节。</li>
+    <li>去掉 waist roll、waist pitch、left/right wrist pitch、left/right wrist yaw。</li>
+    <li>输出 NPZ 字段 <code>qpos_23dof</code>，shape 为 <code>[T, 30]</code>。</li>
+  </ul>
+
+  <h2>3. MuJoCo 可视化问题定位</h2>
+  <p>
+    发现 <code>g1_23dof.urdf</code> 中 floating base joint 被注释掉，因此 MuJoCo 加载后是 fixed-base 模型，<code>model.nq == 23</code>。
+  </p>
+  <div class="callout warning">
+    原 visualizer 在 <code>qpos_23dof</code> 为 30 列、模型只要 23 列时直接截断前 23 列，导致 root xyz/quaternion 被当成腿部关节角输入。这是“腿飞到天上”的直接原因之一。
+  </div>
+  <p>
+    已修复 <code>test_retarget_23dof/visualize_mujoco_23dof.py</code>：当输入是 <code>[T, 30]</code> 而目标模型是 fixed-base 23DOF 时，自动使用 <code>qpos_23dof[:, 7:]</code>。
+  </p>
+
+  <h2>4. 研究目录与诊断工具</h2>
+  <p>新增研究目录 <code>research/retarget_23dof_g1/</code>，集中放置 23DOF 验证文档和工具。</p>
+  <table>
+    <thead>
+      <tr>
+        <th>文件</th>
+        <th>作用</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>README.md</code></td>
+        <td>记录目标、问题树、测试路径和验收标准。</td>
+      </tr>
+      <tr>
+        <td><code>check_23dof_npz.py</code></td>
+        <td>无 GUI 检查 NPZ 是否能喂给 23DOF MuJoCo 模型，并报告关节顺序、几何高度范围和限位问题。</td>
+      </tr>
+      <tr>
+        <td><code>npz_global_to_23dof.py</code></td>
+        <td>纯 NumPy 转换器，用仓库自带 G1 demo NPZ 的 <code>global_rot_mats/posed_joints</code> 生成 23DOF qpos NPZ，不依赖 torch。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>5. 生成的 23DOF 示例</h2>
+  <p>
+    生成了 8 个可用于 MuJoCo 查看动作的示例 NPZ，位于 <code>test_retarget_23dof/examples_23dof/</code>。
+  </p>
+  <pre><code>python test_retarget_23dof/visualize_mujoco_23dof.py test_retarget_23dof/examples_23dof/01_single_text_prompt_23dof.npz</code></pre>
+  <p>建议优先查看：</p>
+  <ul>
+    <li><code>01_single_text_prompt_23dof.npz</code></li>
+    <li><code>02_multi_text_ee_constraint_23dof.npz</code></li>
+    <li><code>05_root_path_23dof.npz</code></li>
+    <li><code>06_root_waypoints_23dof.npz</code></li>
+    <li><code>07_text_terrain_23dof.npz</code></li>
+  </ul>
+  <p>
+    <code>03_full_body_keyframes</code>、<code>04_ee_constraint</code>、<code>08_text_object</code> 在 headless 检查中出现轻微 ankle 限位超出，可用于后续评估是否需要 clamp。
+  </p>
+
+  <h2>6. MuJoCo 交互启动方式</h2>
+  <p>动作播放：</p>
+  <pre><code>python test_retarget_23dof/visualize_mujoco_23dof.py test_retarget_23dof/examples_23dof/01_single_text_prompt_23dof.npz</code></pre>
+  <p>官方静态 viewer：</p>
+  <pre><code>python -m mujoco.viewer --mjcf test_retarget_23dof/g1_23dof_mujoco_viewer.urdf</code></pre>
+  <p>
+    交互：鼠标左键旋转，鼠标右键平移，滚轮缩放，<code>Space</code> 暂停/继续，<code>ESC</code> 退出。
+  </p>
+
+  <h2>7. 未纳入提交的大型/本地产物</h2>
+  <ul>
+    <li><code>checkpoints/</code> 包含约 1.1GB 的模型权重，作为本地依赖保留，不纳入本次 Git 提交。</li>
+    <li><code>kimodo-viser/</code> 是带 <code>.git</code> 的外部仓库副本，不直接作为普通目录提交。</li>
+    <li><code>MUJOCO_LOG.TXT</code>、<code>__pycache__/</code> 等运行产物不纳入提交。</li>
+  </ul>
+
+  <h2>8. 后续建议</h2>
+  <ul>
+    <li>先以 fixed-base 23DOF URDF 验证姿态是否正常。</li>
+    <li>若要验证 root 轨迹行走，需要先准备 floating-base 的 23DOF MJCF/URDF。</li>
+    <li>若 MuJoCo 中仍有明显关节异常，下一步应比较 <code>mujoco_rest_zero</code> convention 和 locked-joint 固定变换。</li>
+  </ul>
+</main>
+</body>
+</html>
