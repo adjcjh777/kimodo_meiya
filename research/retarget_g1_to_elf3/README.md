@@ -516,6 +516,18 @@ python research/retarget_g1_to_elf3/render_elf3_videos.py \
 research/retarget_g1_to_elf3/videos_elf3_10s/*.mp4
 ```
 
+录制脚本默认会给 ELF3 场景动态加入浅色 skybox、棋盘地面和固定补光。这样 MP4 里能看到脚相对地面的高度、穿地和滑步问题。
+如果只想录原始 MJCF 场景，可以加：
+
+```bash
+python research/retarget_g1_to_elf3/render_elf3_videos.py \
+  --input research/retarget_g1_to_elf3/generated_elf3_10s \
+  --output-dir research/retarget_g1_to_elf3/videos_elf3_raw \
+  --no-ground
+```
+
+调试时只想快速看前几帧，可以加 `--max-frames 30`。
+
 ## 10. 查看动作
 
 查看原始 G1：

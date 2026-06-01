@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import tempfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 # Must be set before importing mujoco in headless sessions.
@@ -18,6 +20,141 @@ import numpy as np  # noqa: E402
 DEFAULT_ELF3_XML = Path(__file__).resolve().parent / "assets" / "bxi_elf3" / "xmls" / "elf3.xml"
 DEFAULT_INPUT = Path(__file__).resolve().parent / "generated_elf3_10s"
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / "videos_elf3_10s"
+
+
+def has_named_element(parent: ET.Element, tag: str, name: str) -> bool:
+    return any(child.tag == tag and child.get("name") == name for child in parent)
+
+
+def ensure_child(root: ET.Element, tag: str) -> ET.Element:
+    child = root.find(tag)
+    if child is not None:
+        return child
+
+    insert_at = 0
+    for idx, existing in enumerate(list(root)):
+        if existing.tag in {"compiler", "option", "size", "default"}:
+            insert_at = idx + 1
+    child = ET.Element(tag)
+    root.insert(insert_at, child)
+    return child
+
+
+def add_video_scene_elements(root: ET.Element, *, ground_size: float) -> None:
+    asset = ensure_child(root, "asset")
+    if not has_named_element(asset, "texture", "video_skybox"):
+        ET.SubElement(
+            asset,
+            "texture",
+            {
+                "name": "video_skybox",
+                "type": "skybox",
+                "builtin": "gradient",
+                "rgb1": "0.55 0.66 0.78",
+                "rgb2": "0.95 0.96 0.98",
+                "width": "512",
+                "height": "512",
+            },
+        )
+    if not has_named_element(asset, "texture", "video_ground_checker"):
+        ET.SubElement(
+            asset,
+            "texture",
+            {
+                "name": "video_ground_checker",
+                "type": "2d",
+                "builtin": "checker",
+                "rgb1": "0.78 0.82 0.84",
+                "rgb2": "0.56 0.62 0.66",
+                "width": "512",
+                "height": "512",
+            },
+        )
+    if not has_named_element(asset, "material", "video_ground"):
+        ET.SubElement(
+            asset,
+            "material",
+            {
+                "name": "video_ground",
+                "texture": "video_ground_checker",
+                "texrepeat": "8 8",
+                "reflectance": "0.08",
+            },
+        )
+
+    visual = ensure_child(root, "visual")
+    if visual.find("headlight") is None:
+        ET.SubElement(
+            visual,
+            "headlight",
+            {
+                "diffuse": "0.75 0.75 0.75",
+                "ambient": "0.25 0.25 0.25",
+                "specular": "0.10 0.10 0.10",
+            },
+        )
+
+    worldbody = root.find("worldbody")
+    if worldbody is None:
+        raise ValueError("ELF3 XML does not contain a worldbody")
+
+    if not has_named_element(worldbody, "light", "video_key_light"):
+        worldbody.insert(
+            0,
+            ET.Element(
+                "light",
+                {
+                    "name": "video_key_light",
+                    "pos": "0 -3 4",
+                    "dir": "0 0 -1",
+                    "directional": "true",
+                    "diffuse": "0.75 0.75 0.75",
+                    "ambient": "0.22 0.22 0.22",
+                },
+            ),
+        )
+    if not has_named_element(worldbody, "geom", "video_floor"):
+        worldbody.insert(
+            0,
+            ET.Element(
+                "geom",
+                {
+                    "name": "video_floor",
+                    "type": "plane",
+                    "pos": "0 0 0",
+                    "size": f"{ground_size:g} {ground_size:g} 0.01",
+                    "material": "video_ground",
+                    "contype": "1",
+                    "conaffinity": "1",
+                },
+            ),
+        )
+
+
+def load_model_for_render(xml_path: Path, *, add_ground: bool, ground_size: float) -> mujoco.MjModel:
+    if not add_ground:
+        return mujoco.MjModel.from_xml_path(str(xml_path))
+
+    tree = ET.parse(xml_path)
+    root = tree.getroot()
+    add_video_scene_elements(root, ground_size=ground_size)
+
+    # Keep the temporary XML next to the source XML so relative meshdir paths
+    # such as "./meshes" continue to resolve.
+    with tempfile.NamedTemporaryFile(
+        mode="wb",
+        suffix=".xml",
+        prefix=".render_scene_",
+        dir=xml_path.parent,
+        delete=False,
+    ) as tmp:
+        tree.write(tmp, encoding="utf-8", xml_declaration=False)
+        tmp_path = Path(tmp.name)
+
+    try:
+        return mujoco.MjModel.from_xml_path(str(tmp_path))
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def load_qpos(path: Path) -> np.ndarray:
@@ -67,8 +204,13 @@ def render_video(
     fps: float,
     camera_name: str | None,
     camera_distance_scale: float,
+    max_frames: int | None,
 ) -> None:
     qpos = load_qpos(input_path)
+    if max_frames is not None:
+        qpos = qpos[:max_frames]
+    if len(qpos) == 0:
+        raise ValueError(f"No frames to render for {input_path}")
     data = mujoco.MjData(model)
     free_camera = None if camera_name else setup_camera(model, qpos, camera_distance_scale)
     model.vis.global_.offwidth = max(int(model.vis.global_.offwidth), width)
@@ -131,6 +273,9 @@ def main() -> int:
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
     parser.add_argument("--fps", type=float, default=30.0)
+    parser.add_argument("--no-ground", action="store_true", help="Render the raw MJCF scene without the added floor/skybox.")
+    parser.add_argument("--ground-size", type=float, default=8.0, help="Half-size of the added checkerboard floor plane.")
+    parser.add_argument("--max-frames", type=int, default=None, help="Debug option: render only the first N frames.")
     parser.add_argument(
         "--camera",
         default="auto",
@@ -144,7 +289,12 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    model = mujoco.MjModel.from_xml_path(str(args.xml))
+    if args.ground_size <= 0:
+        raise ValueError("--ground-size must be positive")
+    if args.max_frames is not None and args.max_frames <= 0:
+        raise ValueError("--max-frames must be positive")
+
+    model = load_model_for_render(args.xml, add_ground=not args.no_ground, ground_size=args.ground_size)
     inputs = iter_inputs(args.input)
     if not inputs:
         raise FileNotFoundError(f"No NPZ files found: {args.input}")
@@ -159,6 +309,7 @@ def main() -> int:
             fps=args.fps,
             camera_name=None if args.camera == "auto" else args.camera,
             camera_distance_scale=args.camera_distance_scale,
+            max_frames=args.max_frames,
         )
     return 0
 
