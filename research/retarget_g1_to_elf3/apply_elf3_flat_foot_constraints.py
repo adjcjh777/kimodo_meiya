@@ -109,6 +109,68 @@ def geom_lower_z(model: mujoco.MjModel, data: mujoco.MjData, geom_id: int) -> fl
     return float(center[2])
 
 
+def contacts_by_side(foot_contacts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    contacts = np.asarray(foot_contacts, dtype=bool)
+    if contacts.ndim != 2:
+        raise ValueError(f"Expected foot_contacts shape [T, C], got {contacts.shape}")
+    if contacts.shape[1] == 2:
+        return contacts[:, 0].copy(), contacts[:, 1].copy()
+    if contacts.shape[1] == 4:
+        return np.any(contacts[:, [0, 1]], axis=1), np.any(contacts[:, [2, 3]], axis=1)
+    if contacts.shape[1] == 6:
+        return np.any(contacts[:, [0, 1]], axis=1), np.any(contacts[:, [3, 4]], axis=1)
+    raise ValueError(f"Unsupported foot_contacts channel count: {contacts.shape[1]}")
+
+
+def fill_short_contact_gaps(mask: np.ndarray, max_gap: int) -> np.ndarray:
+    if max_gap <= 0:
+        return mask.copy()
+    out = mask.copy()
+    nframes = len(out)
+    idx = 0
+    while idx < nframes:
+        if out[idx]:
+            idx += 1
+            continue
+        start = idx
+        while idx < nframes and not out[idx]:
+            idx += 1
+        end = idx
+        if start > 0 and end < nframes and end - start <= max_gap:
+            out[start:end] = True
+    return out
+
+
+def contact_segments(mask: np.ndarray, min_frames: int) -> list[tuple[int, int]]:
+    segments: list[tuple[int, int]] = []
+    idx = 0
+    while idx < len(mask):
+        if not mask[idx]:
+            idx += 1
+            continue
+        start = idx
+        while idx < len(mask) and mask[idx]:
+            idx += 1
+        end = idx
+        if end - start >= min_frames:
+            segments.append((start, end))
+    return segments
+
+
+def xy_targets_from_contact_segments(
+    xy: np.ndarray,
+    contacts: np.ndarray,
+    *,
+    min_contact_frames: int,
+    anchor_frames: int,
+) -> np.ndarray:
+    targets = np.full_like(xy, np.nan, dtype=np.float64)
+    for start, end in contact_segments(contacts, min_contact_frames):
+        anchor_end = min(end, start + max(1, anchor_frames))
+        targets[start:end] = np.median(xy[start:anchor_end], axis=0)
+    return targets
+
+
 class FlatFootIK:
     def __init__(
         self,
@@ -183,6 +245,8 @@ class FlatFootIK:
         q_ref: np.ndarray,
         left_xy: np.ndarray,
         right_xy: np.ndarray,
+        left_contact: bool,
+        right_contact: bool,
         prev_x: np.ndarray | None,
     ) -> np.ndarray:
         qpos = q_ref.copy()
@@ -198,15 +262,24 @@ class FlatFootIK:
         left_knee = self.knee_bottom(self.left_knee_geoms)
         right_knee = self.knee_bottom(self.right_knee_geoms)
 
-        parts = [
-            self.foot_weight * left_bottoms,
-            self.foot_weight * right_bottoms,
-            self.flat_weight * left_mat[:2, 2],
-            self.flat_weight * right_mat[:2, 2],
-            self.xy_weight * (left_pos[:2] - left_xy),
-            self.xy_weight * (right_pos[:2] - right_xy),
-            self.ref_weight * self.ref_scale * (x - q_ref[self.qpos_indices]),
-        ]
+        parts = []
+        if left_contact:
+            parts.extend(
+                [
+                    self.foot_weight * left_bottoms,
+                    self.flat_weight * left_mat[:2, 2],
+                    self.xy_weight * (left_pos[:2] - left_xy),
+                ]
+            )
+        if right_contact:
+            parts.extend(
+                [
+                    self.foot_weight * right_bottoms,
+                    self.flat_weight * right_mat[:2, 2],
+                    self.xy_weight * (right_pos[:2] - right_xy),
+                ]
+            )
+        parts.append(self.ref_weight * self.ref_scale * (x - q_ref[self.qpos_indices]))
         parts.append(
             self.knee_weight
             * np.array(
@@ -228,6 +301,8 @@ class FlatFootIK:
         prev_x: np.ndarray | None,
         left_xy_target: np.ndarray | None,
         right_xy_target: np.ndarray | None,
+        left_contact: bool,
+        right_contact: bool,
         max_iters: int,
     ) -> np.ndarray:
         self.forward(q_ref)
@@ -240,7 +315,7 @@ class FlatFootIK:
         x = np.clip(x, self.lower, self.upper)
 
         for _ in range(max_iters):
-            residual = self.residual(x, q_ref, left_xy, right_xy, prev_x)
+            residual = self.residual(x, q_ref, left_xy, right_xy, left_contact, right_contact, prev_x)
             jac = np.empty((len(residual), len(x)), dtype=np.float64)
             for col in range(len(x)):
                 step = self.fd_eps
@@ -251,8 +326,8 @@ class FlatFootIK:
                 if xp[col] == xm[col]:
                     jac[:, col] = 0.0
                     continue
-                rp = self.residual(xp, q_ref, left_xy, right_xy, prev_x)
-                rm = self.residual(xm, q_ref, left_xy, right_xy, prev_x)
+                rp = self.residual(xp, q_ref, left_xy, right_xy, left_contact, right_contact, prev_x)
+                rm = self.residual(xm, q_ref, left_xy, right_xy, left_contact, right_contact, prev_x)
                 jac[:, col] = (rp - rm) / (xp[col] - xm[col])
 
             lhs = jac.T @ jac + self.damping * np.eye(len(x), dtype=np.float64)
@@ -388,11 +463,40 @@ def main() -> int:
         action="store_true",
         help="Use the first frame's left/right foot world XY as fixed targets for the whole sequence.",
     )
+    parser.add_argument(
+        "--contact-aware-feet",
+        action="store_true",
+        help="Use foot_contacts to pin only contacting feet; non-contact feet are not forced to the ground.",
+    )
+    parser.add_argument(
+        "--contact-gap-fill",
+        type=int,
+        default=2,
+        help="Fill false gaps of at most N frames inside contact segments.",
+    )
+    parser.add_argument(
+        "--min-contact-frames",
+        type=int,
+        default=3,
+        help="Ignore contact segments shorter than this many frames.",
+    )
+    parser.add_argument(
+        "--target-anchor-frames",
+        type=int,
+        default=3,
+        help="Use the median foot XY over the first N frames of a contact segment as the stationary target.",
+    )
     parser.add_argument("--no-csv", action="store_true")
     args = parser.parse_args()
 
     if args.max_iters <= 0:
         raise ValueError("--max-iters must be positive")
+    if args.contact_gap_fill < 0:
+        raise ValueError("--contact-gap-fill must be non-negative")
+    if args.min_contact_frames <= 0:
+        raise ValueError("--min-contact-frames must be positive")
+    if args.target_anchor_frames <= 0:
+        raise ValueError("--target-anchor-frames must be positive")
     if args.lock_root_xy and args.solve_root_xy:
         raise ValueError("--lock-root-xy and --solve-root-xy cannot be used together")
     for name in (
@@ -438,19 +542,55 @@ def main() -> int:
         qpos[:, 0] = qpos[0, 0]
         qpos[:, 1] = qpos[0, 1]
 
-    left_xy_target: np.ndarray | None = None
-    right_xy_target: np.ndarray | None = None
+    left_contacts = np.ones(qpos.shape[0], dtype=bool)
+    right_contacts = np.ones(qpos.shape[0], dtype=bool)
+    left_xy_targets = np.full((qpos.shape[0], 2), np.nan, dtype=np.float64)
+    right_xy_targets = np.full((qpos.shape[0], 2), np.nan, dtype=np.float64)
+
+    left_xy_by_frame = np.zeros((qpos.shape[0], 2), dtype=np.float64)
+    right_xy_by_frame = np.zeros((qpos.shape[0], 2), dtype=np.float64)
+    for frame_idx, row in enumerate(qpos):
+        left_xy_by_frame[frame_idx], right_xy_by_frame[frame_idx] = solver.foot_xy(row)
+
     if args.stationary_feet:
-        left_xy_target, right_xy_target = solver.foot_xy(qpos[0])
+        left_xy_targets[:] = left_xy_by_frame[0]
+        right_xy_targets[:] = right_xy_by_frame[0]
+    elif args.contact_aware_feet:
+        if "foot_contacts" not in data:
+            raise ValueError(f"{args.input} does not contain foot_contacts required by --contact-aware-feet")
+        left_contacts, right_contacts = contacts_by_side(data["foot_contacts"])
+        if len(left_contacts) != len(qpos):
+            raise ValueError(f"foot_contacts length {len(left_contacts)} does not match qpos length {len(qpos)}")
+        left_contacts = fill_short_contact_gaps(left_contacts, args.contact_gap_fill)
+        right_contacts = fill_short_contact_gaps(right_contacts, args.contact_gap_fill)
+        left_xy_targets = xy_targets_from_contact_segments(
+            left_xy_by_frame,
+            left_contacts,
+            min_contact_frames=args.min_contact_frames,
+            anchor_frames=args.target_anchor_frames,
+        )
+        right_xy_targets = xy_targets_from_contact_segments(
+            right_xy_by_frame,
+            right_contacts,
+            min_contact_frames=args.min_contact_frames,
+            anchor_frames=args.target_anchor_frames,
+        )
+    else:
+        left_xy_targets = left_xy_by_frame
+        right_xy_targets = right_xy_by_frame
 
     repaired = np.empty_like(qpos, dtype=np.float32)
     prev_x: np.ndarray | None = None
     for frame_idx, row in enumerate(qpos):
+        left_xy_target = None if np.isnan(left_xy_targets[frame_idx]).any() else left_xy_targets[frame_idx]
+        right_xy_target = None if np.isnan(right_xy_targets[frame_idx]).any() else right_xy_targets[frame_idx]
         repaired_row = solver.solve_frame(
             row,
             prev_x=prev_x,
             left_xy_target=left_xy_target,
             right_xy_target=right_xy_target,
+            left_contact=bool(left_contacts[frame_idx]),
+            right_contact=bool(right_contacts[frame_idx]),
             max_iters=args.max_iters,
         )
         repaired[frame_idx] = repaired_row.astype(np.float32)
@@ -480,8 +620,12 @@ def main() -> int:
             "solve_root_xy": args.solve_root_xy,
             "root_xy_ref_multiplier": args.root_xy_ref_multiplier,
             "stationary_feet": args.stationary_feet,
-            "left_xy_target": None if left_xy_target is None else left_xy_target.tolist(),
-            "right_xy_target": None if right_xy_target is None else right_xy_target.tolist(),
+            "contact_aware_feet": args.contact_aware_feet,
+            "contact_gap_fill": args.contact_gap_fill,
+            "min_contact_frames": args.min_contact_frames,
+            "target_anchor_frames": args.target_anchor_frames,
+            "left_contact_frames": int(np.sum(left_contacts)),
+            "right_contact_frames": int(np.sum(right_contacts)),
             "knee_clearance": args.knee_clearance,
             "hip_roll_ref_multiplier": args.hip_roll_ref_multiplier,
             "hip_yaw_ref_multiplier": args.hip_yaw_ref_multiplier,
