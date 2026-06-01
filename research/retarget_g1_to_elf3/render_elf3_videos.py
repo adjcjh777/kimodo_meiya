@@ -50,9 +50,9 @@ def add_video_scene_elements(root: ET.Element, *, ground_size: float) -> None:
                 "name": "video_skybox",
                 "type": "skybox",
                 "builtin": "gradient",
-                "rgb1": "0.55 0.66 0.78",
-                "rgb2": "0.95 0.96 0.98",
-                "width": "512",
+                "rgb1": "0.3 0.5 0.7",
+                "rgb2": "0 0 0",
+                "width": "32",
                 "height": "512",
             },
         )
@@ -64,10 +64,12 @@ def add_video_scene_elements(root: ET.Element, *, ground_size: float) -> None:
                 "name": "video_ground_checker",
                 "type": "2d",
                 "builtin": "checker",
-                "rgb1": "0.78 0.82 0.84",
-                "rgb2": "0.56 0.62 0.66",
-                "width": "512",
-                "height": "512",
+                "mark": "edge",
+                "rgb1": "0.2 0.3 0.4",
+                "rgb2": "0.1 0.2 0.3",
+                "markrgb": "0.8 0.8 0.8",
+                "width": "300",
+                "height": "300",
             },
         )
     if not has_named_element(asset, "material", "video_ground"):
@@ -77,8 +79,9 @@ def add_video_scene_elements(root: ET.Element, *, ground_size: float) -> None:
             {
                 "name": "video_ground",
                 "texture": "video_ground_checker",
-                "texrepeat": "8 8",
-                "reflectance": "0.08",
+                "texuniform": "true",
+                "texrepeat": "5 5",
+                "reflectance": "0.2",
             },
         )
 
@@ -89,7 +92,7 @@ def add_video_scene_elements(root: ET.Element, *, ground_size: float) -> None:
             "headlight",
             {
                 "diffuse": "0.75 0.75 0.75",
-                "ambient": "0.25 0.25 0.25",
+                "ambient": "0.18 0.18 0.18",
                 "specular": "0.10 0.10 0.10",
             },
         )
@@ -108,8 +111,8 @@ def add_video_scene_elements(root: ET.Element, *, ground_size: float) -> None:
                     "pos": "0 -3 4",
                     "dir": "0 0 -1",
                     "directional": "true",
-                    "diffuse": "0.75 0.75 0.75",
-                    "ambient": "0.22 0.22 0.22",
+                    "diffuse": "0.65 0.65 0.65",
+                    "ambient": "0.12 0.12 0.12",
                 },
             ),
         )
@@ -211,6 +214,8 @@ def render_video(
         qpos = qpos[:max_frames]
     if len(qpos) == 0:
         raise ValueError(f"No frames to render for {input_path}")
+
+    print(f"rendering {input_path} -> {output_path} ({len(qpos)} frames)", flush=True)
     data = mujoco.MjData(model)
     free_camera = None if camera_name else setup_camera(model, qpos, camera_distance_scale)
     model.vis.global_.offwidth = max(int(model.vis.global_.offwidth), width)
@@ -262,7 +267,7 @@ def render_video(
         writer.release()
         renderer.close()
 
-    print(f"saved {output_path}")
+    print(f"saved {output_path}", flush=True)
 
 
 def main() -> int:

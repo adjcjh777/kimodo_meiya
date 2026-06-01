@@ -516,7 +516,8 @@ python research/retarget_g1_to_elf3/render_elf3_videos.py \
 research/retarget_g1_to_elf3/videos_elf3_10s/*.mp4
 ```
 
-录制脚本默认会给 ELF3 场景动态加入浅色 skybox、棋盘地面和固定补光。这样 MP4 里能看到脚相对地面的高度、穿地和滑步问题。
+录制脚本默认会给 ELF3 场景动态加入 MuJoCo 默认风格的深色 skybox、深色棋盘地面和固定补光。
+这样 MP4 里能看到脚相对地面的高度、穿地和滑步问题。
 如果只想录原始 MJCF 场景，可以加：
 
 ```bash
@@ -527,6 +528,16 @@ python research/retarget_g1_to_elf3/render_elf3_videos.py \
 ```
 
 调试时只想快速看前几帧，可以加 `--max-frames 30`。
+
+重定向脚本默认还会做脚底贴地校正：根据 ELF3 左右脚 collision capsule 的最低点，逐帧调整 root z，
+让最低脚底落在地面高度 `z=0`。如果只想保留原始 root z，可以在重定向阶段加：
+
+```bash
+python research/retarget_g1_to_elf3/retarget_g1_to_elf3_baseline.py \
+  research/retarget_g1_to_elf3/generated_g1_10s \
+  -o research/retarget_g1_to_elf3/generated_elf3_10s \
+  --no-foot-ground-correction
+```
 
 ## 10. 查看动作
 

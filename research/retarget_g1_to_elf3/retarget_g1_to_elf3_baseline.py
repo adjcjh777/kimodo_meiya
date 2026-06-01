@@ -30,6 +30,7 @@ DEFAULT_MAP = THIS_DIR / "joint_map_g1_to_elf3.json"
 DEFAULT_ELF3_XML = THIS_DIR / "assets" / "bxi_elf3" / "xmls" / "elf3.xml"
 DEFAULT_G1_XML = REPO_ROOT / "kimodo" / "assets" / "skeletons" / "g1skel34" / "xml" / "g1.xml"
 DEFAULT_FPS = 30.0
+DEFAULT_FOOT_GROUND_CLEARANCE = 0.0
 ROOT_QPOS_COLUMNS = (
     "root_x",
     "root_y",
@@ -125,6 +126,49 @@ def qpos_ranges(model: mujoco.MjModel) -> dict[int, tuple[float, float]]:
         qadr = int(model.jnt_qposadr[j])
         ranges[qadr] = (float(model.jnt_range[j, 0]), float(model.jnt_range[j, 1]))
     return ranges
+
+
+def foot_collision_geom_ids(model: mujoco.MjModel) -> list[int]:
+    geom_ids: list[int] = []
+    for geom_id in range(model.ngeom):
+        name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, geom_id) or ""
+        if name.startswith(("l_foot", "r_foot")) and name.endswith("_collision"):
+            geom_ids.append(geom_id)
+    if not geom_ids:
+        raise ValueError("No ELF3 foot collision geoms found; cannot apply foot-ground correction")
+    return geom_ids
+
+
+def geom_bottom_z(model: mujoco.MjModel, data: mujoco.MjData, geom_id: int) -> float:
+    # Capsules are aligned with the MuJoCo geom local z-axis.
+    radius = float(model.geom_size[geom_id, 0])
+    half_len = float(model.geom_size[geom_id, 1])
+    axis_z = float(data.geom_xmat[geom_id].reshape(3, 3)[2, 2])
+    return float(data.geom_xpos[geom_id, 2]) - radius - half_len * abs(axis_z)
+
+
+def foot_bottom_heights(model: mujoco.MjModel, qpos: np.ndarray) -> np.ndarray:
+    data = mujoco.MjData(model)
+    geom_ids = foot_collision_geom_ids(model)
+    bottoms = np.zeros(qpos.shape[0], dtype=np.float32)
+    for frame_idx, row in enumerate(qpos):
+        data.qpos[:] = row
+        mujoco.mj_forward(model, data)
+        bottoms[frame_idx] = min(geom_bottom_z(model, data, geom_id) for geom_id in geom_ids)
+    return bottoms
+
+
+def apply_foot_ground_correction(
+    model: mujoco.MjModel,
+    qpos: np.ndarray,
+    *,
+    ground_clearance: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    foot_bottom_before = foot_bottom_heights(model, qpos)
+    root_z_correction = (ground_clearance - foot_bottom_before).astype(np.float32)
+    corrected = qpos.copy()
+    corrected[:, 2] += root_z_correction
+    return corrected.astype(np.float32), foot_bottom_before, root_z_correction
 
 
 def model_hinge_joint_names(model: mujoco.MjModel) -> tuple[str, ...]:
@@ -304,6 +348,8 @@ def convert_file(
     g1_xml: Path,
     root_z_offset: float | None,
     clamp: bool,
+    foot_ground_correction: bool,
+    ground_clearance: float,
     save_csv: bool,
     fps: float,
 ) -> None:
@@ -316,6 +362,15 @@ def convert_file(
         clamp=clamp,
     )
 
+    foot_bottom_before = np.zeros(elf3_qpos.shape[0], dtype=np.float32)
+    root_z_ground_correction = np.zeros(elf3_qpos.shape[0], dtype=np.float32)
+    if foot_ground_correction:
+        elf3_qpos, foot_bottom_before, root_z_ground_correction = apply_foot_ground_correction(
+            elf3_model,
+            elf3_qpos,
+            ground_clearance=ground_clearance,
+        )
+
     src = np.load(input_path, allow_pickle=False)
     g1_qpos_columns = (*ROOT_QPOS_COLUMNS, *model_hinge_joint_names(g1_model))
     save_dict: dict[str, Any] = {
@@ -327,6 +382,10 @@ def convert_file(
         "qpos_g1_columns": np.array(g1_qpos_columns),
         "qpos_columns": np.array(ELF3_QPOS_COLUMNS),
         "root_z_offset": float(root_z_offset if root_z_offset is not None else mapping["root"]["recommended_initial_z_offset"]),
+        "foot_ground_correction_enabled": np.array([foot_ground_correction], dtype=np.bool_),
+        "foot_ground_clearance": np.array([ground_clearance], dtype=np.float32),
+        "foot_bottom_before_ground_correction": foot_bottom_before,
+        "root_z_ground_correction": root_z_ground_correction,
         **mjlab_compatible_fields(
             elf3_model,
             elf3_qpos,
@@ -355,6 +414,14 @@ def convert_file(
                 f"before=[{report['min_before']:.3f}, {report['max_before']:.3f}] "
                 f"after=[{report['min_after']:.3f}, {report['max_after']:.3f}]"
             )
+    if foot_ground_correction:
+        print(
+            "  foot-ground correction: "
+            f"foot_bottom_before=[{float(foot_bottom_before.min()):.3f}, "
+            f"{float(np.median(foot_bottom_before)):.3f}, {float(foot_bottom_before.max()):.3f}] "
+            f"root_z_shift=[{float(root_z_ground_correction.min()):.3f}, "
+            f"{float(np.median(root_z_ground_correction)):.3f}, {float(root_z_ground_correction.max()):.3f}]"
+        )
 
 
 def iter_inputs(input_path: Path) -> list[Path]:
@@ -380,9 +447,23 @@ def main() -> int:
     parser.add_argument("--elf3-xml", type=Path, default=DEFAULT_ELF3_XML)
     parser.add_argument("--root-z-offset", type=float, default=None)
     parser.add_argument("--fps", type=float, default=DEFAULT_FPS)
+    parser.add_argument(
+        "--no-foot-ground-correction",
+        action="store_true",
+        help="Do not align ELF3 foot collision bottoms to the ground after retargeting.",
+    )
+    parser.add_argument(
+        "--ground-clearance",
+        type=float,
+        default=DEFAULT_FOOT_GROUND_CLEARANCE,
+        help="Target minimum foot clearance after correction.",
+    )
     parser.add_argument("--no-clamp", action="store_true", help="Do not clamp to ELF3 joint limits.")
     parser.add_argument("--no-csv", action="store_true", help="Do not write ELF3 qpos CSV sidecars.")
     args = parser.parse_args()
+
+    if args.ground_clearance < 0:
+        raise ValueError("--ground-clearance must be non-negative")
 
     mapping = load_map(args.map)
     elf3_model = mujoco.MjModel.from_xml_path(str(args.elf3_xml))
@@ -401,6 +482,8 @@ def main() -> int:
             g1_xml=args.g1_xml,
             root_z_offset=args.root_z_offset,
             clamp=not args.no_clamp,
+            foot_ground_correction=not args.no_foot_ground_correction,
+            ground_clearance=args.ground_clearance,
             save_csv=not args.no_csv,
             fps=args.fps,
         )

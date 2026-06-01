@@ -162,8 +162,11 @@ MUJOCO_LOG.TXT
 /research/retarget_g1_to_elf3/generated_elf3_10s/
 /research/retarget_g1_to_elf3/generated_g1_baseline/
 /research/retarget_g1_to_elf3/generated_elf3_baseline/
+/research/retarget_g1_to_elf3/generated_g1_flat_feet_knees_off_ground_test/
+/research/retarget_g1_to_elf3/generated_elf3_flat_feet_knees_off_ground_test/
 /research/retarget_g1_to_elf3/videos_elf3_10s/
 /research/retarget_g1_to_elf3/videos_elf3_baseline/
+/research/retarget_g1_to_elf3/video_g1_to_elf3_test/
 /research/retarget_g1_to_elf3/*.zip
 
 # deploy files
