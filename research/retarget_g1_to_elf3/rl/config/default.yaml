@@ -1,0 +1,159 @@
+# ELF3 RL 训练配置
+
+# MuJoCo 模型
+xml_path: "research/retarget_g1_to_elf3/assets/bxi_elf3/xmls/elf3_complie.xml"
+motion_dir: "research/retarget_g1_to_elf3/generated_elf3_baseline"
+
+# PD 控制器参数
+pd:
+  kp: 100.0
+  kd: 5.0
+
+# 动作空间
+action:
+  scale: 0.3  # 动作输出范围（目标关节角度 = 参考角度 ± scale）
+
+# 仿真参数
+sim:
+  dt: 0.002  # MuJoCo 时间步长
+  control_dt: 0.030  # 记录值；环境实际使用 dt * substeps
+  substeps: 15  # 每个控制步的子步数（当前控制周期 0.030s）
+
+# Episode 参数
+episode:
+  max_steps: 1000  # 每个 episode 最大步数（约 33.3 秒）
+  save_demo_interval: 1000  # 每 1000 步保存演示输出
+
+# 终止条件
+termination:
+  # 摔倒检测
+  fall_height: 0.5  # 躯干高度 < 0.5m 视为摔倒
+  max_pitch: 0.785  # 45° (0.785 rad)
+  max_roll: 0.785   # 45° (0.785 rad)
+  # 跟踪失败检测
+  tracking_error_threshold: 1.0  # 关节误差 > 1.0 rad
+  tracking_error_duration: 50    # 持续 50 步则终止
+  # 早期终止惩罚/奖励
+  fall_penalty: -10.0            # 摔倒惩罚
+  timeout_reward: 5.0            # 存活到最大步数奖励
+  tracking_fail_penalty: -5.0    # 跟踪失败惩罚
+
+# 奖励权重（总权重 1.0）
+reward:
+  # 跟踪奖励（60%）
+  joint_position: 0.30    # 关节位置误差
+  joint_velocity: 0.10    # 关节速度误差
+  end_effector_pos: 0.15  # 末端执行器位置（手、脚）
+  root_position: 0.05     # 根节点位置误差
+  # 稳定性奖励（30%）
+  survival: 0.05          # 存活奖励（每步固定）
+  com_height: 0.15        # 重心高度奖励
+  energy: 0.05            # 能量惩罚（力矩平方）
+  smoothness: 0.05        # 动作平滑性奖励
+  # 脚部惩罚（10%）
+  foot_penetration: 0.05  # 脚部穿地惩罚
+  foot_airborne: 0.05     # 脚部悬空惩罚
+
+# 奖励函数参数
+reward_params:
+  # 指数衰减系数
+  joint_pos_k: 5.0
+  joint_vel_k: 0.1
+  end_eff_k: 10.0
+  root_pos_k: 2.0
+  com_height_k: 10.0
+  com_height_target: 1.0  # 目标重心高度（米）
+  # 平滑性系数
+  action_smooth_k: 0.01
+  energy_k: 0.001
+  # 脚部惩罚参数
+  penetration_threshold: -0.02  # z < -0.02m 视为穿地
+  airborne_threshold: 0.06      # z > 0.06m 视为悬空
+  airborne_ref_threshold: 0.04  # 参考动作 z < 0.04m
+  penetration_k: 1.0
+  penetration_alpha: 50.0
+  airborne_k: 0.5
+  airborne_alpha: 20.0
+  # 存活奖励
+  survival_reward: 0.01
+
+# 动作路由（自动检测允许离地的动作）
+action_routing:
+  airborne_height_threshold: 0.10  # 参考动作脚部最高 z > 0.10m 则允许离地
+  airborne_penalty_scale: 0.1      # 允许离地时悬空惩罚乘以 0.1
+
+# 域随机化
+domain_randomization:
+  enabled: true
+  # 第一阶段（低扰动）
+  phase1:
+    gravity_scale: [0.95, 1.05]      # 重力 ±5%
+    friction_range: [0.8, 1.2]        # 摩擦 0.8~1.2
+    pd_gain_scale: [0.8, 1.2]         # PD 增益 ±20%
+    root_pos_range: [-0.05, 0.05]     # 根位置 ±5cm
+    root_vel_range: [-0.1, 0.1]       # 根速度 ±0.1 m/s
+  # 第二阶段（高扰动）
+  phase2:
+    gravity_scale: [0.90, 1.10]       # 重力 ±10%
+    friction_range: [0.5, 1.5]        # 摩擦 0.5~1.5
+    pd_gain_scale: [0.8, 1.2]         # PD 增益 ±20%
+    root_pos_range: [-0.05, 0.05]     # 根位置 ±5cm
+    root_vel_range: [-0.1, 0.1]       # 根速度 ±0.1 m/s
+
+# 课程学习
+curriculum:
+  enabled: true
+  # 第一阶段：简单动作 + 低扰动
+  phase1:
+    timesteps: 20000000  # 20M steps
+    categories: ["balance", "upper_body"]  # 只训练这两类
+    category_weights:
+      balance: 0.4
+      upper_body: 0.6
+    initial_phase_random: false  # 总是从 phase=0 开始
+    dr_phase: "phase1"  # 使用低扰动
+  # 第二阶段：所有动作 + 高扰动
+  phase2:
+    timesteps: 30000000  # 30M steps
+    categories: ["balance", "upper_body", "locomotion", "compound"]
+    category_weights:
+      balance: 0.2
+      upper_body: 0.3
+      locomotion: 0.3
+      compound: 0.2
+    initial_phase_random: true  # 随机相位开始
+    dr_phase: "phase2"  # 使用高扰动
+
+# 训练参数
+training:
+  num_envs: 64               # 并行环境数
+  n_steps: 2048              # 每个环境每轮训练步数
+  batch_size: 2048           # PPO batch size
+  n_epochs: 10               # 每轮数据的训练次数
+  learning_rate: 0.0003      # 学习率
+  gamma: 0.99                # 折扣因子
+  gae_lambda: 0.95           # GAE lambda
+  clip_range: 0.2            # PPO clip range
+  ent_coef: 0.01             # 熵正则化系数
+  total_timesteps: 50000000  # 总训练步数（50M）
+
+# 网络结构
+network:
+  net_arch: [512, 256]  # MLP 两层
+  activation: "ELU"     # 激活函数
+  ortho_init: true      # 正交初始化
+  # 策略网络输出层使用 Tanh 激活（限制动作范围）
+  # 价值网络输出层使用线性激活
+
+# GPU 配置
+gpu:
+  n_gpus: 2  # 使用的 GPU 数量
+  auto_select: true  # 自动选择低占用 GPU
+
+# 日志和保存
+logging:
+  tensorboard_log: "runs/elf3_rl"
+  checkpoint_dir: "checkpoints/elf3_rl"
+  checkpoint_freq: 500000  # 每 500k steps 保存一次
+  eval_freq: 100000        # 每 100k steps 评估一次
+  n_eval_episodes: 10      # 每次评估的 episode 数

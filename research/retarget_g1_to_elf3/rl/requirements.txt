@@ -1,0 +1,9 @@
+gymnasium>=0.29
+stable-baselines3[extra]>=2.3
+mujoco>=3.2
+PyYAML>=6.0
+tensorboard>=2.16
+tqdm>=4.66
+opencv-python>=4.9
+onnx>=1.16
+onnxruntime>=1.18
