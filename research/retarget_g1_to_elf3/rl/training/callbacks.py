@@ -37,10 +37,9 @@ class MotionSwitchCallback(BaseCallback):
 
     def _on_training_start(self) -> None:
         """Initialize clip counts."""
-        # Get motion manager from first environment
-        env_unwrapped = self.env.get_attr('motion_manager')[0]
-        for clip in env_unwrapped.clips:
-            self.clip_counts[clip.name] = 0
+        clip_names = self.env.env_method('get_clip_names', indices=[0])[0]
+        for clip_name in clip_names:
+            self.clip_counts[clip_name] = 0
 
         if self.verbose > 0:
             print(f"MotionSwitchCallback: Tracking {len(self.clip_counts)} clips")
@@ -238,6 +237,13 @@ class EvalCallback(BaseCallback):
         episode_rewards = []
         episode_lengths = []
         tracking_errors = []
+        termination_counts = {
+            'fall': 0,
+            'tracking_fail': 0,
+            'simulation_unstable': 0,
+            'timeout': 0,
+            'unknown': 0,
+        }
 
         for _ in range(self.n_eval_episodes):
             obs = self.eval_env.reset()
@@ -256,6 +262,18 @@ class EvalCallback(BaseCallback):
                 if 'tracking_error' in info[0]:
                     episode_tracking_errors.append(info[0]['tracking_error'])
 
+                if bool(done[0]):
+                    if info[0].get('simulation_unstable'):
+                        termination_counts['simulation_unstable'] += 1
+                    else:
+                        reason = info[0].get('termination_reason')
+                        if reason in termination_counts:
+                            termination_counts[reason] += 1
+                        elif info[0].get('TimeLimit.truncated'):
+                            termination_counts['timeout'] += 1
+                        else:
+                            termination_counts['unknown'] += 1
+
             episode_rewards.append(episode_reward)
             episode_lengths.append(episode_length)
             if episode_tracking_errors:
@@ -270,9 +288,12 @@ class EvalCallback(BaseCallback):
         self.logger.record('eval/mean_reward', mean_reward)
         self.logger.record('eval/mean_length', mean_length)
         self.logger.record('eval/mean_tracking_error', mean_tracking_error)
+        for reason, count in termination_counts.items():
+            self.logger.record(f'eval/termination_{reason}', count)
 
         if self.verbose > 0:
             print(f"\nEvaluation at step {self.num_timesteps}:")
             print(f"  Mean reward: {mean_reward:.2f}")
             print(f"  Mean length: {mean_length:.1f}")
             print(f"  Mean tracking error: {mean_tracking_error:.4f}")
+            print(f"  Terminations: {termination_counts}")

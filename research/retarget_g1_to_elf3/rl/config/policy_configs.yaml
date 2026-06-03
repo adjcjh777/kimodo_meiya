@@ -1,0 +1,79 @@
+policies:
+  locomotion_policy:
+    net_arch:
+      pi: [1024, 512, 256]
+      vf: [1024, 512, 256]
+    total_timesteps: 50000000
+    reward_weights:
+      joint_position: 0.22
+      joint_velocity: 0.12
+      end_effector_pos: 0.12
+      root_position: 0.12
+      survival: 0.04
+      com_height: 0.12
+      energy: 0.04
+      smoothness: 0.08
+      foot_penetration: 0.07
+      foot_airborne: 0.07
+    curriculum:
+      phase1_ratio: 0.4
+      phase2_ratio: 0.6
+      phase1_motions:
+        - side_step_left
+        - side_step_right
+        - turn_left
+        - turn_right
+        - walk_forward
+        - walk_forward_slow
+
+  posture_balance_policy:
+    net_arch:
+      pi: [768, 512, 256]
+      vf: [768, 512, 256]
+    total_timesteps: 35000000
+    reward_weights:
+      joint_position: 0.25
+      joint_velocity: 0.08
+      end_effector_pos: 0.14
+      root_position: 0.05
+      survival: 0.05
+      com_height: 0.18
+      energy: 0.04
+      smoothness: 0.10
+      foot_penetration: 0.07
+      foot_airborne: 0.04
+    curriculum:
+      phase1_ratio: 0.4
+      phase2_ratio: 0.6
+      phase1_motions:
+        - lean_forward_backward
+        - single_leg_stand_left
+        - single_leg_stand_right
+        - tiptoe_stand
+        - weight_shift_left_right
+
+  upper_body_policy:
+    net_arch:
+      pi: [512, 256]
+      vf: [512, 256]
+    total_timesteps: 20000000
+    reward_weights:
+      joint_position: 0.32
+      joint_velocity: 0.08
+      end_effector_pos: 0.22
+      root_position: 0.02
+      survival: 0.06
+      com_height: 0.14
+      energy: 0.04
+      smoothness: 0.08
+      foot_penetration: 0.03
+      foot_airborne: 0.01
+    curriculum:
+      phase1_ratio: 0.4
+      phase2_ratio: 0.6
+      phase1_motions:
+        - point_forward_left
+        - point_forward_right
+        - raise_both_arms
+        - wave_left_hand
+        - wave_right_hand

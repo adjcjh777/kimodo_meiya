@@ -162,12 +162,25 @@ MUJOCO_LOG.TXT
 /research/retarget_g1_to_elf3/generated_elf3_10s/
 /research/retarget_g1_to_elf3/generated_g1_baseline/
 /research/retarget_g1_to_elf3/generated_elf3_baseline/
+/research/retarget_g1_to_elf3/generated_g1_locomotion/
+/research/retarget_g1_to_elf3/generated_g1_upper_body/
+/research/retarget_g1_to_elf3/generated_g1_compound/
+/research/retarget_g1_to_elf3/generated_g1_balance/
+/research/retarget_g1_to_elf3/generated_elf3_locomotion/
+/research/retarget_g1_to_elf3/generated_elf3_upper_body/
+/research/retarget_g1_to_elf3/generated_elf3_compound/
+/research/retarget_g1_to_elf3/generated_elf3_balance/
 /research/retarget_g1_to_elf3/generated_g1_flat_feet_knees_off_ground_test/
 /research/retarget_g1_to_elf3/generated_elf3_flat_feet_knees_off_ground_test/
 /research/retarget_g1_to_elf3/videos_elf3_10s/
 /research/retarget_g1_to_elf3/videos_elf3_baseline/
 /research/retarget_g1_to_elf3/video_g1_to_elf3_test/
 /research/retarget_g1_to_elf3/*.zip
+/research/retarget_g1_to_elf3/rl/checkpoints/
+/research/retarget_g1_to_elf3/rl/runs/
+/research/retarget_g1_to_elf3/rl/logs/
+/research/retarget_g1_to_elf3/rl/exports/
+/research/retarget_g1_to_elf3/rl/demos/
 
 # deploy files
 /helm-library

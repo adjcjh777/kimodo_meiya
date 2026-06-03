@@ -1,0 +1,233 @@
+model:
+  name: elf3_mimic_tracker_v1
+  goal: robust_anchor_relative_motion_tracking
+  implementation_stage: design
+
+  observation_layout:
+    current_box_dim: 586
+    streams:
+      proprio:
+        dim: 68
+        fields:
+          - root_height
+          - root_linear_velocity
+          - root_angular_velocity
+          - gravity_projection
+          - joint_position
+          - joint_velocity
+      phase:
+        dim: 2
+        fields:
+          - phase_sin
+          - phase_cos
+      action_summary:
+        dim: 1
+        fields:
+          - previous_action_mean
+      root_state:
+        dim: 7
+        fields:
+          - root_quaternion
+          - root_position
+      reference_horizon:
+        frames: 4
+        dim_per_frame: 67
+        current_dim: 268
+        current_fields:
+          - ref_joint_position
+          - ref_joint_velocity
+          - ref_root_delta_local
+          - ref_root_quaternion
+          - ref_foot_contact
+        target_upgrade:
+          type: anchor_relative_body_targets
+          anchor_body: torso_or_pelvis
+          tracked_bodies:
+            - torso
+            - head
+            - left_hand
+            - right_hand
+            - left_foot
+            - right_foot
+            - left_knee
+            - right_knee
+            - left_elbow
+            - right_elbow
+      action_history:
+        dim: 58
+      body_state:
+        dim: 180
+      foot_contact:
+        dim: 2
+
+  actor:
+    type: structured_gaussian_actor
+    encoders:
+      proprio_encoder:
+        type: mlp
+        input_dim: 68
+        hidden: [256, 256]
+        activation: elu
+      reference_temporal_encoder:
+        type: transformer_or_gru
+        input_tokens: 4
+        input_dim: 67
+        embed_dim: 256
+        layers: 2
+        heads: 4
+        activation: elu
+      history_encoder:
+        type: mlp
+        input_dim: 58
+        hidden: [128]
+        activation: elu
+      body_encoder:
+        type: mlp
+        input_dim: 182
+        hidden: [256, 256]
+        activation: elu
+      skill_encoder:
+        type: embedding
+        sources:
+          - policy_id
+          - clip_category
+          - clip_id
+        embed_dim: 64
+    fusion:
+      type: mlp
+      input_dim: 896
+      hidden: [512, 512]
+      activation: elu
+      layer_norm: true
+    action_heads:
+      lower_body_balance:
+        joints:
+          - left_hip_pitch
+          - left_hip_roll
+          - left_hip_yaw
+          - left_knee
+          - left_ankle_pitch
+          - left_ankle_roll
+          - right_hip_pitch
+          - right_hip_roll
+          - right_hip_yaw
+          - right_knee
+          - right_ankle_pitch
+          - right_ankle_roll
+        center: nominal_stance
+        residual_scale: 0.20
+      waist_balance:
+        joints:
+          - waist_yaw
+          - waist_roll
+          - waist_pitch
+        center: blend_nominal_and_reference
+        residual_scale: 0.15
+      upper_body_tracking:
+        joints:
+          - left_shoulder_pitch
+          - left_shoulder_roll
+          - left_shoulder_yaw
+          - left_elbow
+          - left_wrist_roll
+          - left_wrist_pitch
+          - right_shoulder_pitch
+          - right_shoulder_roll
+          - right_shoulder_yaw
+          - right_elbow
+          - right_wrist_roll
+          - right_wrist_pitch
+        center: reference_upper_body
+        residual_scale: 0.35
+    output:
+      distribution: diagonal_gaussian
+      log_std:
+        mode: per_action_group
+        init: 0.6
+        min: -2.0
+        max: 1.0
+
+  critic:
+    type: asymmetric_privileged_critic
+    actor_feature_dim: 512
+    privileged_observation:
+      enabled: true
+      fields:
+        - anchor_relative_body_pose_errors
+        - anchor_relative_body_twist_errors
+        - root_height_margin
+        - root_pitch_margin
+        - root_roll_margin
+        - foot_bottom_heights
+        - foot_contact_state
+        - domain_randomization_params
+        - recent_termination_flags
+    network:
+      privileged_encoder_hidden: [512, 512]
+      fusion_hidden: [512, 256]
+      activation: elu
+
+  reward:
+    style: body_tracking_with_minimal_regularization
+    positive_terms:
+      - anchor_height_upright
+      - anchor_relative_body_position
+      - body_orientation
+      - body_twist
+      - upper_body_end_effector
+    penalties:
+      - action_rate
+      - joint_soft_limit
+      - self_collision
+      - low_weight_energy
+    avoid_as_primary_terms:
+      - full_absolute_root_position
+      - full_joint_position_tracking_for_legs
+
+  curriculum:
+    stage0_reference_gate:
+      action_zero_survival_steps_min: 150
+      fail_on_nonfinite_state: true
+      fail_on_root_orientation_limit: true
+    stage1_balance_warm_start:
+      domain_randomization: false
+      target_eval_mean_length_min: 300
+      target_eval_fall_count_max: 2
+    stage2_single_clip_upper_body:
+      clips:
+        - raise_both_arms
+        - wave_right_hand
+        - wave_left_hand
+        - point_forward_left
+        - point_forward_right
+      adaptive_phase_sampling: true
+    stage3_multi_clip_upper_body:
+      clips: phase1_upper_body
+      adaptive_clip_sampling: true
+    stage4_full_policy:
+      clips: policy_route_upper_body
+      phase_randomization: true
+    stage5_domain_randomization:
+      enabled_after_stable_tracking: true
+      terms:
+        - friction
+        - gravity
+        - pd_gain
+        - root_velocity
+        - action_delay
+
+  later_diffusion_composer:
+    enabled_initially: false
+    prerequisite:
+      - stable_tracker_rollouts
+      - eval_fall_count_below_threshold
+      - action_zero_or_nominal_replay_passes
+    architecture:
+      type: state_action_diffusion_transformer
+      history_steps: 4
+      future_steps: 32
+      action_loss_horizon: 8
+      denoise_steps: 20
+      transformer_layers: 6
+      heads: 4
+      embed_dim: 512

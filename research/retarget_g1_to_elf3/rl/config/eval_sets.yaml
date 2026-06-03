@@ -1,0 +1,136 @@
+benchmark_eval:
+  include_root_clips: false
+  clips:
+    locomotion_policy:
+      - side_step_left
+      - side_step_left_fast
+      - side_step_left_fast_v2
+      - side_step_left_v2
+      - side_step_left_wide
+      - side_step_left_wide_v2
+      - side_step_right
+      - side_step_right_fast
+      - side_step_right_fast_v2
+      - side_step_right_v2
+      - side_step_right_wide
+      - side_step_right_wide_v2
+      - stand_to_walk
+      - turn_and_wave
+      - turn_left
+      - turn_left_sharp
+      - turn_left_sharp_v2
+      - turn_left_v2
+      - turn_left_v3
+      - turn_right
+      - turn_right_sharp
+      - turn_right_sharp_v2
+      - turn_right_v2
+      - turn_right_v3
+      - walk_and_carry
+      - walk_and_carry_v2
+      - walk_and_point
+      - walk_and_point_v2
+      - walk_and_wave_left
+      - walk_and_wave_left_v2
+      - walk_and_wave_right
+      - walk_and_wave_right_v2
+      - walk_backward
+      - walk_backward_turn
+      - walk_backward_v2
+      - walk_backward_v3
+      - walk_diagonal_left
+      - walk_diagonal_left_v2
+      - walk_diagonal_right
+      - walk_diagonal_right_v2
+      - walk_forward
+      - walk_forward_fast
+      - walk_forward_fast_v2
+      - walk_forward_long_steps
+      - walk_forward_long_steps_v2
+      - walk_forward_slow
+      - walk_forward_slow_v2
+      - walk_forward_small_steps
+      - walk_forward_small_steps_v2
+      - walk_forward_v2
+      - walk_forward_v3
+      - walk_side_step_walk
+      - walk_to_stop
+      - walk_turn_walk
+    posture_balance_policy:
+      - lean_forward_backward
+      - single_leg_stand_left
+      - single_leg_stand_left_arms_out
+      - single_leg_stand_right
+      - single_leg_stand_right_arms_out
+      - squat_multiple
+      - squat_to_stand
+      - stand_to_squat
+      - tiptoe_left
+      - tiptoe_right
+      - tiptoe_stand
+      - tiptoe_walk
+      - turn_squat_turn
+      - wave_kick_wave
+      - weight_shift_left_right
+    upper_body_policy:
+      - arms_behind_back
+      - arms_cross
+      - arms_open_wide
+      - clap_hands
+      - hands_on_hips
+      - point_forward_left
+      - point_forward_left_v2
+      - point_forward_right
+      - point_forward_right_v2
+      - point_up_left
+      - point_up_left_v2
+      - point_up_right
+      - point_up_right_v2
+      - punch_left
+      - punch_right
+      - push_forward
+      - raise_both_arms
+      - raise_both_arms_v2
+      - reach_forward_left
+      - reach_forward_left_v2
+      - reach_forward_right
+      - reach_forward_right_v2
+      - reach_sideways_left
+      - reach_sideways_left_v2
+      - reach_sideways_right
+      - wave_both_hands
+      - wave_left_hand
+      - wave_left_hand_v2
+      - wave_right_hand
+      - wave_right_hand_v2
+      - wave_sequence
+
+debug_eval:
+  include_root_clips: true
+  clips:
+    locomotion_policy:
+      - walk_forward
+      - side_step_left
+      - turn_left
+      - walk_and_wave_left
+    posture_balance_policy:
+      - lean_forward_backward
+      - tiptoe_stand
+      - stand_to_squat
+      - wave_kick_wave
+    upper_body_policy:
+      - raise_both_arms
+      - wave_left_hand
+      - point_forward_right
+      - wave_sequence
+  legacy_root_clips:
+    - kick_forward
+    - raise_both_arms
+    - side_step_left
+    - side_step_right
+    - squat_down
+    - turn_left
+    - turn_right
+    - walk_forward
+    - wave_left_hand
+    - wave_right_hand

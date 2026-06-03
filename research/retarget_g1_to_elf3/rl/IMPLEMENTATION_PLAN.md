@@ -154,7 +154,7 @@ Tasks:
 - Load `policy_configs.yaml` and select the requested policy.
 - Use per-policy `net_arch`, reward weights, total timesteps, and curriculum split.
 - Filter the environment's motion set to that policy's routed clips.
-- Save outputs under `checkpoints/elf3_rl/{policy_id}/`.
+- Save outputs under `research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/{policy_id}/`.
 - Save VecNormalize stats per policy and phase.
 - Keep single-policy smoke mode through `--timesteps` for fast checks.
 

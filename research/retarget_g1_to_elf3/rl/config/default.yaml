@@ -3,6 +3,13 @@
 # MuJoCo 模型
 xml_path: "research/retarget_g1_to_elf3/assets/bxi_elf3/xmls/elf3_complie.xml"
 motion_dir: "research/retarget_g1_to_elf3/generated_elf3_baseline"
+policy_route_path: "research/retarget_g1_to_elf3/rl/config/policy_route.yaml"
+policy_configs_path: "research/retarget_g1_to_elf3/rl/config/policy_configs.yaml"
+eval_sets_path: "research/retarget_g1_to_elf3/rl/config/eval_sets.yaml"
+
+# 观测配置
+observation:
+  horizon_offsets: [0, 3, 6, 12]
 
 # PD 控制器参数
 pd:
@@ -135,6 +142,7 @@ training:
   gae_lambda: 0.95           # GAE lambda
   clip_range: 0.2            # PPO clip range
   ent_coef: 0.01             # 熵正则化系数
+  target_kl: 0.03            # PPO KL 保护；过大更新会提前停止 epoch
   total_timesteps: 50000000  # 总训练步数（50M）
 
 # 网络结构
@@ -152,8 +160,8 @@ gpu:
 
 # 日志和保存
 logging:
-  tensorboard_log: "runs/elf3_rl"
-  checkpoint_dir: "checkpoints/elf3_rl"
+  tensorboard_log: "research/retarget_g1_to_elf3/rl/runs/elf3_rl"
+  checkpoint_dir: "research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl"
   checkpoint_freq: 500000  # 每 500k steps 保存一次
   eval_freq: 100000        # 每 100k steps 评估一次
   n_eval_episodes: 10      # 每次评估的 episode 数

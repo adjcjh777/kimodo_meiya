@@ -6,7 +6,7 @@ import mujoco.viewer
 import gymnasium as gym
 from gymnasium import spaces
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Sequence
 import yaml
 
 from .reference_motion import ReferenceMotionManager, MotionClip
@@ -50,7 +50,13 @@ class ELF3TrackingEnv(gym.Env):
         self,
         config_path: Optional[str] = None,
         render_mode: Optional[str] = None,
-        curriculum_phase: int = 1
+        curriculum_phase: int = 1,
+        policy_id: Optional[str] = None,
+        motion_stems: Optional[Sequence[str]] = None,
+        load_mode: str = "train",
+        include_classified_clips: bool = True,
+        include_root_clips: bool = False,
+        reward_weights: Optional[Dict[str, float]] = None,
     ):
         """Initialize ELF3 tracking environment.
 
@@ -58,6 +64,12 @@ class ELF3TrackingEnv(gym.Env):
             config_path: Path to YAML config file
             render_mode: Rendering mode ('human', 'rgb_array', or None)
             curriculum_phase: Curriculum phase (1 or 2) for training
+            policy_id: Optional skill policy id, used for info and logs
+            motion_stems: Optional explicit reference motion stem filter
+            load_mode: Reference loading mode: train, benchmark_eval, or debug_eval
+            include_classified_clips: Whether to load classified subdirectory clips
+            include_root_clips: Whether to load root-level legacy clips
+            reward_weights: Optional per-policy reward weights
         """
         super().__init__()
 
@@ -71,6 +83,9 @@ class ELF3TrackingEnv(gym.Env):
 
         self.render_mode = render_mode
         self.curriculum_phase = curriculum_phase
+        self.policy_id = policy_id
+        self.motion_stems = list(motion_stems) if motion_stems is not None else None
+        self.load_mode = load_mode
 
         # Extract config values
         self.xml_path = _resolve_existing_path(self.config['xml_path'], config_path=config_path)
@@ -96,8 +111,14 @@ class ELF3TrackingEnv(gym.Env):
         self.tracking_fail_penalty = self.config['termination']['tracking_fail_penalty']
 
         # Reward weights and params
-        self.reward_weights = self.config['reward']
+        self.reward_weights = reward_weights if reward_weights is not None else self.config['reward']
         self.reward_params = self.config['reward_params']
+
+        # Observation horizon
+        observation_config = self.config.get('observation', {})
+        self.horizon_offsets = list(observation_config.get('horizon_offsets', [0, 3, 6, 12]))
+        if len(self.horizon_offsets) != 4:
+            raise ValueError(f"Expected 4 horizon offsets, got {self.horizon_offsets}")
 
         # Action routing
         self.airborne_height_threshold = self.config['action_routing']['airborne_height_threshold']
@@ -125,6 +146,9 @@ class ELF3TrackingEnv(gym.Env):
         self.allowed_categories = phase_config['categories']
         self.category_weights = phase_config['category_weights']
         self.initial_phase_random = phase_config['initial_phase_random']
+        if self.motion_stems is not None:
+            self.allowed_categories = []
+            self.category_weights = {}
 
         # Load MuJoCo model
         self.model = mujoco.MjModel.from_xml_path(self.xml_path)
@@ -144,7 +168,14 @@ class ELF3TrackingEnv(gym.Env):
         self.joint_force_slice = slice(6, 6 + self.n_dofs)
 
         # Reference motion manager
-        self.motion_manager = ReferenceMotionManager(self.motion_dir, xml_path=self.xml_path)
+        self.motion_manager = ReferenceMotionManager(
+            self.motion_dir,
+            xml_path=self.xml_path,
+            mode=self.load_mode,
+            motion_stems=self.motion_stems,
+            include_classified_clips=include_classified_clips,
+            include_root_clips=include_root_clips,
+        )
 
         # State variables
         self.current_clip: Optional[MotionClip] = None
@@ -165,19 +196,19 @@ class ELF3TrackingEnv(gym.Env):
         self.right_foot_geom_ids = self._get_named_geom_indices("r_foot")
 
         # Define spaces
-        # Observation: 385 dims
+        # Observation: 586 dims
         # - 本体状态 (78): root_height(1) + root_lin_vel(3) + root_ang_vel(3) + gravity_proj(3)
         #                   + phase_sin_cos(2) + action_mean(1) + joint_pos(29) + joint_vel(29)
         #                   + root_quat(4) + root_pos(3)
-        # - 参考动作 (67): ref_joint_pos(29) + ref_joint_vel(29) + ref_root_pos(3)
-        #                   + ref_root_quat(4) + ref_foot_contact(2)
+        # - Reference Horizon (268): 4 * (ref_joint_pos(29) + ref_joint_vel(29)
+        #                   + ref_root_delta_local(3) + ref_root_quat(4) + ref_foot_contact(2))
         # - 历史信息 (58): last_action(29) + action_before_last(29)
         # - 体状态 (180): body_pos(90) + body_vel(90)
         # - 脚部接触 (2): foot_contact(2)
         self.observation_space = spaces.Box(
             low=-np.inf,
             high=np.inf,
-            shape=(385,),
+            shape=(586,),
             dtype=np.float32
         )
 
@@ -192,6 +223,10 @@ class ELF3TrackingEnv(gym.Env):
         # Rendering
         self.viewer = None
         self.renderer = None
+
+    def get_clip_names(self) -> list[str]:
+        """Return loaded reference clip names without copying full motion data."""
+        return [clip.name for clip in self.motion_manager.clips]
 
     def _sample_clip(self) -> MotionClip:
         """Sample a reference motion clip respecting curriculum constraints."""
@@ -289,12 +324,7 @@ class ELF3TrackingEnv(gym.Env):
         if requested_clip is not None:
             self.current_clip = requested_clip
         elif requested_clip_name is not None:
-            self.current_clip = next(
-                (clip for clip in self.motion_manager.clips if clip.name == requested_clip_name),
-                None,
-            )
-            if self.current_clip is None:
-                raise ValueError(f"Unknown reference clip: {requested_clip_name}")
+            self.current_clip = self.motion_manager.get_clip(requested_clip_name)
         else:
             self.current_clip = self._sample_clip()
         self.phase = 0.0
@@ -471,21 +501,7 @@ class ELF3TrackingEnv(gym.Env):
         return obs, reward, terminated, truncated, info
 
     def _get_obs(self) -> np.ndarray:
-        """Construct observation vector (385 dims).
-
-        Structure:
-        - 本体状态 (78): root_height(1) + root_lin_vel(3) + root_ang_vel(3) + gravity_proj(3)
-                          + phase_sin_cos(2) + action_mean(1) + joint_pos(29) + joint_vel(29)
-                          + root_quat(4) + root_pos(3)
-        - 参考动作 (67): ref_joint_pos(29) + ref_joint_vel(29) + ref_root_pos(3)
-                          + ref_root_quat(4) + ref_foot_contact(2)
-        - 历史信息 (58): last_action(29) + action_before_last(29)
-        - 体状态 (180): body_pos(90) + body_vel(90)
-        - 脚部接触 (2): foot_contact(2)
-
-        Returns:
-            Observation vector of shape (385,)
-        """
+        """Construct observation vector (586 dims)."""
         obs_parts = []
 
         # 本体状态 - Part 1 (10 dims)
@@ -516,18 +532,30 @@ class ELF3TrackingEnv(gym.Env):
         # Root state - Part 2 (7 dims)
         obs_parts.extend([root_quat, self.data.qpos[0:3]])  # quat(4) + pos(3)
 
-        # 参考动作 (67 dims)
-        ref_state = self.motion_manager.get_reference(self.current_clip, self.phase)
-        ref_joint_pos = ref_state['joint_pos']  # 29
-        ref_joint_vel = ref_state['joint_vel']  # 29
-        obs_parts.extend([ref_joint_pos, ref_joint_vel])
-
-        ref_root_pos = ref_state['root_pos']  # 3
-        ref_root_quat = ref_state['root_quat']  # 4
-        obs_parts.extend([ref_root_pos, ref_root_quat])
-
-        ref_foot_contact = ref_state['foot_contacts']  # 2
-        obs_parts.append(ref_foot_contact)
+        # Reference Horizon (4 * 67 dims)
+        current_root_pos = self.data.qpos[0:3]
+        current_root_quat = root_quat
+        for frame_offset in self.horizon_offsets:
+            ref_state = self.motion_manager.get_reference(
+                self.current_clip,
+                self.phase,
+                frame_offset=frame_offset,
+            )
+            ref_joint_pos = ref_state['joint_pos']  # 29
+            ref_joint_vel = ref_state['joint_vel']  # 29
+            ref_root_delta_local = self._quat_rotate_inv(
+                current_root_quat,
+                ref_state['root_pos'] - current_root_pos,
+            )  # 3
+            ref_root_quat = ref_state['root_quat']  # 4
+            ref_foot_contact = ref_state['foot_contacts']  # 2
+            obs_parts.extend([
+                ref_joint_pos,
+                ref_joint_vel,
+                ref_root_delta_local,
+                ref_root_quat,
+                ref_foot_contact,
+            ])
 
         # 历史信息 (58 dims)
         obs_parts.extend([self.last_action, self.action_before_last])  # 29 + 29
@@ -544,9 +572,10 @@ class ELF3TrackingEnv(gym.Env):
 
         # Concatenate all parts
         obs = np.concatenate(obs_parts).astype(np.float32)
+        obs = np.nan_to_num(obs, nan=0.0, posinf=1e6, neginf=-1e6)
 
         # Sanity check
-        assert obs.shape == (385,), f"Observation shape mismatch: expected (385,), got {obs.shape}"
+        assert obs.shape == (586,), f"Observation shape mismatch: expected (586,), got {obs.shape}"
 
         return obs
 
@@ -687,8 +716,10 @@ class ELF3TrackingEnv(gym.Env):
         return {
             'phase': self.phase,
             'step_count': self.step_count,
+            'policy_id': self.policy_id,
             'clip_name': self.current_clip.name if self.current_clip else None,
             'clip_category': self.current_clip.category if self.current_clip else None,
+            'clip_is_legacy_root': self.current_clip.is_legacy_root if self.current_clip else None,
             'control_dt': self.control_dt,
         }
 

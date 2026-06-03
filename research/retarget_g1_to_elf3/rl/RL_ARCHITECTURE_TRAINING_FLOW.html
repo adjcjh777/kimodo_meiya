@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ELF3 RL 架构与训练流程</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17202a;
+      --muted: #5b6674;
+      --line: #d7dde5;
+      --surface: #ffffff;
+      --band: #f4f6f8;
+      --navy: #253858;
+      --teal: #0f766e;
+      --amber: #b45309;
+      --rose: #be123c;
+      --green: #15803d;
+      --code: #111827;
+      --code-bg: #f1f5f9;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--surface);
+      font-family: "Inter", "Noto Sans CJK SC", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.62;
+    }
+
+    header {
+      background: #eef2f6;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .wrap {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 28px;
+    }
+
+    .hero {
+      min-height: 360px;
+      display: grid;
+      align-content: center;
+      gap: 22px;
+      padding: 52px 0 44px;
+    }
+
+    .kicker {
+      color: var(--teal);
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 900px;
+      margin: 0;
+      font-size: clamp(34px, 5vw, 60px);
+      line-height: 1.08;
+      font-weight: 760;
+    }
+
+    .lead {
+      max-width: 880px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 18px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 3px 10px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+      border-radius: 999px;
+      color: var(--navy);
+      font-weight: 650;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: rgba(255, 255, 255, 0.96);
+      border-bottom: 1px solid var(--line);
+    }
+
+    nav .wrap {
+      display: flex;
+      gap: 18px;
+      overflow-x: auto;
+      padding-top: 12px;
+      padding-bottom: 12px;
+    }
+
+    nav a {
+      color: var(--navy);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    main section {
+      padding: 44px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    main section:nth-child(even) {
+      background: var(--band);
+    }
+
+    h2 {
+      margin: 0 0 18px;
+      font-size: 28px;
+      line-height: 1.22;
+    }
+
+    h3 {
+      margin: 26px 0 10px;
+      font-size: 19px;
+      line-height: 1.35;
+    }
+
+    p {
+      margin: 0 0 14px;
+    }
+
+    ul {
+      margin: 8px 0 18px;
+      padding-left: 22px;
+    }
+
+    li {
+      margin: 4px 0;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 20px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .metric strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--navy);
+      font-size: 22px;
+      line-height: 1.2;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .flow-step {
+      min-height: 126px;
+      border: 1px solid var(--line);
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 14px;
+      display: grid;
+      align-content: start;
+      gap: 6px;
+    }
+
+    .flow-step b {
+      color: var(--navy);
+      font-size: 15px;
+    }
+
+    .flow-step small {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .policy-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }
+
+    .policy {
+      border: 1px solid var(--line);
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 18px;
+    }
+
+    .policy h3 {
+      margin-top: 0;
+    }
+
+    .policy .tag {
+      display: inline-block;
+      margin-bottom: 10px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: var(--navy);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 22px;
+      background: #ffffff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      font-size: 14px;
+    }
+
+    th {
+      background: #e9eef5;
+      color: var(--navy);
+      font-weight: 750;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code,
+    pre {
+      font-family: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+    }
+
+    code {
+      padding: 1px 5px;
+      background: var(--code-bg);
+      border-radius: 4px;
+      color: var(--code);
+    }
+
+    pre {
+      overflow-x: auto;
+      margin: 14px 0 18px;
+      padding: 15px 16px;
+      border: 1px solid var(--line);
+      background: var(--code-bg);
+      border-radius: 8px;
+      color: var(--code);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .callout {
+      border-left: 4px solid var(--amber);
+      background: #fff7ed;
+      padding: 14px 16px;
+      margin: 18px 0;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .ok {
+      border-left-color: var(--green);
+      background: #f0fdf4;
+    }
+
+    .risk {
+      border-left-color: var(--rose);
+      background: #fff1f2;
+    }
+
+    .file-map {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 16px;
+    }
+
+    .file-item {
+      border: 1px solid var(--line);
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 14px;
+    }
+
+    .file-item b {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--navy);
+    }
+
+    footer {
+      padding: 28px 0 40px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 980px) {
+      .summary-grid,
+      .policy-grid,
+      .file-map {
+        grid-template-columns: 1fr;
+      }
+
+      .flow {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 620px) {
+      .wrap {
+        padding: 0 18px;
+      }
+
+      .hero {
+        min-height: 320px;
+        padding: 38px 0 32px;
+      }
+
+      .flow {
+        grid-template-columns: 1fr;
+      }
+
+      th,
+      td {
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap hero">
+      <div class="kicker">Kimodo / G1 to ELF3 / RL</div>
+      <h1>ELF3 RL 架构与训练流程</h1>
+      <p class="lead">
+        这份文档梳理当前 RL 子系统的端到端链路：参考动作数据如何进入环境，三类 Skill Policy 如何显式路由，
+        Gymnasium/MuJoCo 环境如何构造 586 维观测和 29 维残差动作，以及 PPO 训练、评估、导出的执行方式。
+      </p>
+      <div class="meta">
+        <span class="pill">生成日期：2026-06-03</span>
+        <span class="pill">运行时：/home/chengjunhao/miniforge3/envs/kimodo-elf3-rl</span>
+        <span class="pill">状态：已通过 32-step 三策略 smoke</span>
+      </div>
+    </div>
+  </header>
+
+  <nav>
+    <div class="wrap">
+      <a href="#overview">总体架构</a>
+      <a href="#data">数据层</a>
+      <a href="#routing">策略路由</a>
+      <a href="#environment">环境接口</a>
+      <a href="#reward">Reward 与安全</a>
+      <a href="#training">训练流程</a>
+      <a href="#eval-export">评估与导出</a>
+      <a href="#video-output">输出视频</a>
+      <a href="#gate">长训门槛</a>
+      <a href="#files">文件地图</a>
+    </div>
+  </nav>
+
+  <main>
+    <section id="overview">
+      <div class="wrap">
+        <h2>总体架构</h2>
+        <p>
+          当前设计不再训练一个覆盖所有动作的 universal policy，而是训练三个互相独立的 Skill Policy。
+          三个 policy 保持相同的 <code>observation(586) -> action(29)</code> 接口，但训练数据、网络容量、
+          reward 权重和 checkpoint 都是独立的。
+        </p>
+
+        <div class="summary-grid">
+          <div class="metric">
+            <strong>100</strong>
+            <span>分类训练 clips，只来自 <code>generated_elf3_baseline/*/*.npz</code></span>
+          </div>
+          <div class="metric">
+            <strong>3</strong>
+            <span>独立 Skill Policy：locomotion、posture/balance、upper body</span>
+          </div>
+          <div class="metric">
+            <strong>586 / 29</strong>
+            <span>统一观测维度 / 统一动作维度</span>
+          </div>
+        </div>
+
+        <div class="flow" aria-label="RL pipeline">
+          <div class="flow-step">
+            <b>1. Retarget 数据</b>
+            <small>G1 动作转换为 ELF3 NPZ 参考轨迹</small>
+          </div>
+          <div class="flow-step">
+            <b>2. Route 校验</b>
+            <small>motion stem 显式映射到一个 policy id</small>
+          </div>
+          <div class="flow-step">
+            <b>3. Motion Loader</b>
+            <small>按 train/eval/debug 模式加载 clip</small>
+          </div>
+          <div class="flow-step">
+            <b>4. MuJoCo Env</b>
+            <small>构造 586 维 observation 和 residual action</small>
+          </div>
+          <div class="flow-step">
+            <b>5. PPO 训练</b>
+            <small>每个 Skill Policy 独立训练和保存</small>
+          </div>
+          <div class="flow-step">
+            <b>6. Eval / Export</b>
+            <small>按 policy 评估，导出 ONNX 和 NPZ</small>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="data">
+      <div class="wrap">
+        <h2>数据层</h2>
+        <p>
+          参考动作来自 G1 到 ELF3 的 retargeting 工作流，训练只使用四个分类子目录中的 100 条 NPZ。
+          根目录下旧 baseline NPZ 不进入训练，也不进入正式 benchmark eval。
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>目录</th>
+              <th>数量</th>
+              <th>用途</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>generated_elf3_baseline/locomotion/</code></td>
+              <td>40</td>
+              <td>走路、转身、侧步等步态动作</td>
+            </tr>
+            <tr>
+              <td><code>generated_elf3_baseline/upper_body/</code></td>
+              <td>30</td>
+              <td>挥手、举臂、指向、推拳等上肢动作</td>
+            </tr>
+            <tr>
+              <td><code>generated_elf3_baseline/compound/</code></td>
+              <td>20</td>
+              <td>行走加上肢、蹲起转身等复合动作</td>
+            </tr>
+            <tr>
+              <td><code>generated_elf3_baseline/balance/</code></td>
+              <td>10</td>
+              <td>单脚、踮脚、重心转移等平衡动作</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>核心 NPZ 字段</h3>
+        <pre><code>{
+  "qpos_elf3": (T, 36),          # root 7 + joints 29
+  "joint_pos": (T, 29),
+  "joint_vel": (T, 29),
+  "body_pos_w": (T, 30, 3),
+  "body_lin_vel_w": (T, 30, 3),
+  "foot_contacts": (T, 2 or 4),  # 加载后统一归并为左右脚 2 维
+  "fps": 30.0
+}</code></pre>
+
+        <div class="callout ok">
+          <b>当前校验结果：</b> route 覆盖 100 条训练 clip，无重复 stem，无 root legacy clip 混入训练 route。
+        </div>
+      </div>
+    </section>
+
+    <section id="routing">
+      <div class="wrap">
+        <h2>策略路由</h2>
+        <p>
+          路由真值是 <code>config/policy_route.yaml</code>，key 是不带 <code>.npz</code> 后缀的 motion stem。
+          目录名、关键词规则、自动分类器都不是当前版本的路由依据。
+        </p>
+
+        <div class="policy-grid">
+          <article class="policy">
+            <span class="tag">54 clips</span>
+            <h3>locomotion_policy</h3>
+            <p>覆盖所有 locomotion 目录动作，以及 locomotion-heavy compound，例如 <code>stand_to_walk</code>、<code>walk_turn_walk</code>、<code>walk_and_wave_left</code>。</p>
+          </article>
+          <article class="policy">
+            <span class="tag">15 clips</span>
+            <h3>posture_balance_policy</h3>
+            <p>覆盖 balance 目录动作，以及蹲起、踮脚、姿态转换和 <code>wave_kick_wave</code> 等平衡压力较高的动作。</p>
+          </article>
+          <article class="policy">
+            <span class="tag">31 clips</span>
+            <h3>upper_body_policy</h3>
+            <p>覆盖 upper_body 目录动作，以及纯上肢复合序列 <code>wave_sequence</code>。</p>
+          </article>
+        </div>
+
+        <h3>配置文件角色</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>文件</th>
+              <th>作用</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>config/policy_route.yaml</code></td>
+              <td>100 个 training motion stem 到三个 policy id 的显式映射。</td>
+            </tr>
+            <tr>
+              <td><code>config/policy_configs.yaml</code></td>
+              <td>每个 policy 的网络结构、reward weights、总训练步数和 phase1 clips。</td>
+            </tr>
+            <tr>
+              <td><code>config/eval_sets.yaml</code></td>
+              <td><code>benchmark_eval</code> 和 <code>debug_eval</code> 的 clip 清单。</td>
+            </tr>
+            <tr>
+              <td><code>config/default.yaml</code></td>
+              <td>MuJoCo、PD、仿真、PPO 默认参数和配置文件路径。</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="environment">
+      <div class="wrap">
+        <h2>环境接口</h2>
+        <p>
+          <code>ELF3TrackingEnv</code> 是 Gymnasium 环境，内部使用 MuJoCo 模拟 ELF3。
+          三个 policy 使用相同 observation 和 action 规格，因此未来切换到共享 backbone 或部署路由时不会改变低层接口。
+        </p>
+
+        <h3>Observation 586 维</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>模块</th>
+              <th>维度</th>
+              <th>内容</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>本体状态</td>
+              <td>78</td>
+              <td>root height、root velocity、gravity projection、phase sin/cos、action mean、joint pos/vel、root quat/pos</td>
+            </tr>
+            <tr>
+              <td>Reference Horizon</td>
+              <td>268</td>
+              <td>4 个参考点，每点 67 维：ref joint pos/vel、root local delta、root quat、foot contact</td>
+            </tr>
+            <tr>
+              <td>历史动作</td>
+              <td>58</td>
+              <td><code>last_action</code> 和 <code>action_before_last</code></td>
+            </tr>
+            <tr>
+              <td>body 状态</td>
+              <td>180</td>
+              <td>30 个 body 的位置和线速度</td>
+            </tr>
+            <tr>
+              <td>当前脚接触</td>
+              <td>2</td>
+              <td>左右脚当前是否接触地面</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <pre><code>horizon_offsets = [0, 3, 6, 12]
+ref_root_delta_local = rotate_inv(current_root_quat, ref_root_pos - current_root_pos)</code></pre>
+
+        <h3>Action 29 维</h3>
+        <p>
+          policy 输出 29 维残差动作，范围为 <code>[-1, 1]</code>。
+          环境把它变成关节目标角，再用 PD 控制生成 torque。
+        </p>
+        <pre><code>target_joint_pos = ref_joint_pos + action * action_scale
+tau = kp * (target_joint_pos - current_joint_pos) - kd * current_joint_vel</code></pre>
+      </div>
+    </section>
+
+    <section id="reward">
+      <div class="wrap">
+        <h2>Reward 与运行时安全</h2>
+        <p>
+          reward 组件在三个 policy 之间共享，但权重按 policy 配置。整体由 tracking、stability、foot penalties 三部分构成。
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Reward 组</th>
+              <th>组件</th>
+              <th>训练意图</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Tracking</td>
+              <td>joint position、joint velocity、end-effector position、root position</td>
+              <td>让物理闭环轨迹尽量跟随参考动作。</td>
+            </tr>
+            <tr>
+              <td>Stability</td>
+              <td>survival、COM height、energy、smoothness</td>
+              <td>鼓励存活、稳定高度、低能耗和动作连续。</td>
+            </tr>
+            <tr>
+              <td>Foot penalties</td>
+              <td>foot penetration、unexpected airborne</td>
+              <td>限制穿地和非预期脚悬空。</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout">
+          <b>运行时保护：</b> action 会做 <code>nan_to_num</code> 和 clip；指数 foot penalty 有上界；
+          总 reward 做 finite clipping；MuJoCo 非有限状态会以 <code>simulation_unstable</code> 终止并恢复有限 terminal observation。
+        </div>
+      </div>
+    </section>
+
+    <section id="training">
+      <div class="wrap">
+        <h2>训练流程</h2>
+        <p>
+          训练入口是 <code>training/train.py</code>。每次训练一个 policy，训练脚本会读取 policy route、
+          policy config，过滤该 policy 的 motion set，并写入独立 checkpoint 和 VecNormalize 统计。
+        </p>
+
+        <h3>训练阶段</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>阶段</th>
+              <th>motion 范围</th>
+              <th>初始相位</th>
+              <th>域随机化</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Phase 1</td>
+              <td>该 policy 的 <code>phase1_motions</code></td>
+              <td>固定从 phase 0 开始</td>
+              <td>低扰动</td>
+            </tr>
+            <tr>
+              <td>Phase 2</td>
+              <td>该 policy route 到的全部 clips</td>
+              <td>随机 phase</td>
+              <td>高扰动</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>常用命令</h3>
+        <pre><code># 训练单个 policy
+CUDA_VISIBLE_DEVICES=4 /home/chengjunhao/miniforge3/envs/kimodo-elf3-rl/bin/python \
+  -m research.retarget_g1_to_elf3.rl.training.train \
+  --policy-id upper_body_policy \
+  --n-gpus 1
+
+# 32-step smoke
+CUDA_VISIBLE_DEVICES=4 /home/chengjunhao/miniforge3/envs/kimodo-elf3-rl/bin/python \
+  -m research.retarget_g1_to_elf3.rl.training.train \
+  --policy-id locomotion_policy \
+  --timesteps 32 \
+  --n-gpus 1
+
+# 强制训练某个 phase
+CUDA_VISIBLE_DEVICES=4 /home/chengjunhao/miniforge3/envs/kimodo-elf3-rl/bin/python \
+  -m research.retarget_g1_to_elf3.rl.training.train \
+  --policy-id posture_balance_policy \
+  --curriculum-phase 1 \
+  --n-gpus 1</code></pre>
+
+        <h3>输出路径</h3>
+        <pre><code>research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/{policy_id}/final_model.zip
+research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/{policy_id}/vec_normalize_phase{phase}.pkl
+research/retarget_g1_to_elf3/rl/runs/elf3_rl/{policy_id}/
+research/retarget_g1_to_elf3/rl/logs/</code></pre>
+
+        <h3>TensorBoard 监控</h3>
+        <pre><code>cd /home/chengjunhao/kimodo
+tmux new -d -s elf3-rl-tensorboard research/retarget_g1_to_elf3/rl/scripts/start_tensorboard.sh
+
+# 浏览器打开
+http://127.0.0.1:6006/</code></pre>
+        <p>
+          Reward 主要看 <code>eval/mean_reward</code> 和 <code>rollout/ep_rew_mean</code>。
+          <code>eval/mean_reward</code> 是定期评估奖励；<code>rollout/ep_rew_mean</code> 是训练环境 episode reward，
+          需要重启训练后由 <code>Monitor</code> wrapper 记录。
+          如果 episode 很短，同时看 <code>eval/mean_length</code> 和 <code>eval/termination_*</code>。
+        </p>
+
+        <h3>为什么 final model 是 zip</h3>
+        <p>
+          <code>final_model.zip</code> 是 Stable-Baselines3 的原生 checkpoint 格式，不是随手打包的普通压缩文件。
+          SB3 会把 policy 参数、算法配置、observation/action space、训练相关状态等内容写入这个 zip archive。
+          这个文件适合继续训练、评估和用 SB3 加载。
+        </p>
+        <p>
+          部署或机器人侧推理时不要直接依赖 <code>final_model.zip</code>。
+          应使用 <code>export/export_model.py</code> 从 SB3 checkpoint 导出 <code>.onnx</code> 和
+          <code>_weights.npz</code>，其中 ONNX 是更常见的推理部署格式，NPZ 是纯权重检查/自定义加载格式。
+        </p>
+      </div>
+    </section>
+
+    <section id="eval-export">
+      <div class="wrap">
+        <h2>评估与导出</h2>
+        <p>
+          评估按 <code>--policy-id</code> 和 <code>--eval-set</code> 选择 clips。
+          <code>benchmark_eval</code> 不包含 root legacy；<code>debug_eval --legacy-root</code> 可以显式加载旧 baseline clip。
+        </p>
+
+        <h3>评估命令</h3>
+        <pre><code># 正式 benchmark eval
+/home/chengjunhao/miniforge3/envs/kimodo-elf3-rl/bin/python \
+  -m research.retarget_g1_to_elf3.rl.eval.evaluate \
+  research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/locomotion_policy/final_model.zip \
+  --policy-id locomotion_policy \
+  --eval-set benchmark_eval
+
+# debug eval 加载 root legacy clip
+/home/chengjunhao/miniforge3/envs/kimodo-elf3-rl/bin/python \
+  -m research.retarget_g1_to_elf3.rl.eval.evaluate \
+  research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/locomotion_policy/final_model.zip \
+  --policy-id locomotion_policy \
+  --eval-set debug_eval \
+  --legacy-root \
+  --clip walk_forward</code></pre>
+
+        <p>
+          评估 summary 包含 mean reward、tracking error、survival、action smoothness、
+          <code>simulation_unstable_rate</code> 和 termination counts。
+        </p>
+
+        <h3>导出命令</h3>
+        <pre><code># 导出三个 policy 的 ONNX 和 NPZ 权重
+/home/chengjunhao/miniforge3/envs/kimodo-elf3-rl/bin/python \
+  -m research.retarget_g1_to_elf3.rl.export.export_model \
+  --all-policies \
+  --output-dir research/retarget_g1_to_elf3/rl/exports</code></pre>
+
+        <p>
+          导出默认使用 <code>obs_dim=586</code>，ONNX 输入为 <code>observation [batch, 586]</code>，
+          输出为 <code>action [batch, 29]</code>。
+        </p>
+      </div>
+    </section>
+
+    <section id="video-output">
+      <div class="wrap">
+        <h2>动作视频输出</h2>
+        <p>
+          训练后的动作通过 <code>eval/evaluate.py --render</code> 渲染为 MP4。
+          建议统一输出到 RL 子项目的 <code>research/retarget_g1_to_elf3/rl/demos/</code>，这样可以集中查看不同 policy 和 clip 的效果。
+          当前 smoke 模型只训练了 32 step，视频主要用于验证渲染链路，动作质量需要小预算或长训后再判断。
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Policy</th>
+              <th>示例 clip</th>
+              <th>输出视频</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>locomotion_policy</code></td>
+              <td><code>walk_forward</code></td>
+              <td><code>/home/chengjunhao/kimodo/research/retarget_g1_to_elf3/rl/demos/rl_walk_forward.mp4</code></td>
+            </tr>
+            <tr>
+              <td><code>upper_body_policy</code></td>
+              <td><code>wave_left_hand</code></td>
+              <td><code>/home/chengjunhao/kimodo/research/retarget_g1_to_elf3/rl/demos/rl_wave_left_hand.mp4</code></td>
+            </tr>
+            <tr>
+              <td><code>posture_balance_policy</code></td>
+              <td><code>tiptoe_stand</code></td>
+              <td><code>/home/chengjunhao/kimodo/research/retarget_g1_to_elf3/rl/demos/rl_tiptoe_stand.mp4</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>生成视频命令</h3>
+        <pre><code>cd /home/chengjunhao/kimodo
+
+# Locomotion: walk_forward
+CUDA_VISIBLE_DEVICES=4 /home/chengjunhao/miniforge3/envs/kimodo-elf3-rl/bin/python \
+  -m research.retarget_g1_to_elf3.rl.eval.evaluate \
+  research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/locomotion_policy/final_model.zip \
+  --policy-id locomotion_policy \
+  --eval-set debug_eval \
+  --clip walk_forward \
+  --render research/retarget_g1_to_elf3/rl/demos/rl_walk_forward.mp4 \
+  --max-steps 300
+
+# Upper body: wave_left_hand
+CUDA_VISIBLE_DEVICES=4 /home/chengjunhao/miniforge3/envs/kimodo-elf3-rl/bin/python \
+  -m research.retarget_g1_to_elf3.rl.eval.evaluate \
+  research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/upper_body_policy/final_model.zip \
+  --policy-id upper_body_policy \
+  --eval-set debug_eval \
+  --clip wave_left_hand \
+  --render research/retarget_g1_to_elf3/rl/demos/rl_wave_left_hand.mp4 \
+  --max-steps 300
+
+# Posture / balance: tiptoe_stand
+CUDA_VISIBLE_DEVICES=4 /home/chengjunhao/miniforge3/envs/kimodo-elf3-rl/bin/python \
+  -m research.retarget_g1_to_elf3.rl.eval.evaluate \
+  research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/posture_balance_policy/final_model.zip \
+  --policy-id posture_balance_policy \
+  --eval-set debug_eval \
+  --clip tiptoe_stand \
+  --render research/retarget_g1_to_elf3/rl/demos/rl_tiptoe_stand.mp4 \
+  --max-steps 300</code></pre>
+
+        <h3>打开视频</h3>
+        <pre><code>xdg-open /home/chengjunhao/kimodo/research/retarget_g1_to_elf3/rl/demos/rl_walk_forward.mp4
+xdg-open /home/chengjunhao/kimodo/research/retarget_g1_to_elf3/rl/demos/rl_wave_left_hand.mp4
+xdg-open /home/chengjunhao/kimodo/research/retarget_g1_to_elf3/rl/demos/rl_tiptoe_stand.mp4</code></pre>
+
+        <h3>文档内预览</h3>
+        <p>
+          如果下面的视频路径已生成，浏览器会直接显示播放器。路径使用相对 HTML 文件的位置：
+          <code>demos/*.mp4</code>。
+        </p>
+
+        <div class="policy-grid">
+          <article class="policy">
+            <span class="tag">locomotion</span>
+            <h3>walk_forward</h3>
+            <video controls preload="metadata" width="100%" src="demos/rl_walk_forward.mp4">
+              当前浏览器无法播放该 MP4，请使用 xdg-open 打开 demos/rl_walk_forward.mp4。
+            </video>
+          </article>
+          <article class="policy">
+            <span class="tag">upper body</span>
+            <h3>wave_left_hand</h3>
+            <video controls preload="metadata" width="100%" src="demos/rl_wave_left_hand.mp4">
+              当前浏览器无法播放该 MP4，请使用 xdg-open 打开 demos/rl_wave_left_hand.mp4。
+            </video>
+          </article>
+          <article class="policy">
+            <span class="tag">posture balance</span>
+            <h3>tiptoe_stand</h3>
+            <video controls preload="metadata" width="100%" src="demos/rl_tiptoe_stand.mp4">
+              当前浏览器无法播放该 MP4，请使用 xdg-open 打开 demos/rl_tiptoe_stand.mp4。
+            </video>
+          </article>
+        </div>
+
+        <div class="callout">
+          <b>Legacy baseline 视频：</b> 如果要渲染根目录旧 baseline clip，需要额外加
+          <code>--eval-set debug_eval --legacy-root</code>。正式 benchmark eval 不会使用这些 root legacy clips。
+        </div>
+      </div>
+    </section>
+
+    <section id="gate">
+      <div class="wrap">
+        <h2>长训前门槛</h2>
+        <div class="callout risk">
+          <b>当前风险：</b> 32-step smoke 已能完成，但 MuJoCo 仍会出现 <code>QACC</code> instability warning。
+          代码会阻止 NaN/Inf 污染 PPO，但这不代表动作质量已可接受。
+        </div>
+
+        <p>长训前建议先做 rollout stability audit：</p>
+        <ul>
+          <li>按 policy、clip、phase 统计 <code>simulation_unstable</code>、<code>fall</code>、<code>tracking_fail</code>、<code>timeout</code>。</li>
+          <li>定位不稳定最高的动作和 phase。</li>
+          <li>必要时调 <code>action.scale</code>、PD gain、domain randomization、termination thresholds 或 reward weights。</li>
+          <li>确认 observation 和 reward 全程 finite，再进入 50k+ 或百万级训练。</li>
+        </ul>
+
+        <h3>建议长训顺序</h3>
+        <ol>
+          <li><code>upper_body_policy</code>：先小预算，再完整 20M。</li>
+          <li><code>posture_balance_policy</code>：先小预算，再完整 35M。</li>
+          <li><code>locomotion_policy</code>：先小预算，再完整 50M。</li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="files">
+      <div class="wrap">
+        <h2>文件地图</h2>
+        <div class="file-map">
+          <div class="file-item">
+            <b><code>env/reference_motion.py</code></b>
+            <span>加载 NPZ、校验 route 覆盖、过滤 clip、提供 reference lookup 和 horizon offset。</span>
+          </div>
+          <div class="file-item">
+            <b><code>env/elf3_env.py</code></b>
+            <span>Gymnasium/MuJoCo 环境，构造 586 维 observation、29 维 action、PD 控制和终止逻辑。</span>
+          </div>
+          <div class="file-item">
+            <b><code>env/rewards.py</code></b>
+            <span>tracking/stability/foot reward 组件，以及 bounded penalty 和 finite clipping。</span>
+          </div>
+          <div class="file-item">
+            <b><code>training/train.py</code></b>
+            <span>policy-aware PPO 训练入口，负责 phase motion filter、VecNormalize、checkpoint 和日志。</span>
+          </div>
+          <div class="file-item">
+            <b><code>eval/evaluate.py</code></b>
+            <span>policy-aware benchmark/debug eval，支持 legacy root debug clip 和终止原因统计。</span>
+          </div>
+          <div class="file-item">
+            <b><code>export/export_model.py</code></b>
+            <span>导出每个 policy 的 ONNX 和 NPZ 权重，并对 ONNX 与 SB3 deterministic predict 做一致性验证。</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      本文档为当前代码状态的架构整理。正式长训前仍需完成 rollout stability audit，并根据不稳定率调整控制和 reward 参数。
+    </div>
+  </footer>
+</body>
+</html>

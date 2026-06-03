@@ -478,9 +478,9 @@ action: (29,)
 
 | Skill Policy | 训练数据来源 | Checkpoint 目录 |
 | --- | --- | --- |
-| `locomotion_policy` | 行走、转弯、侧步、步态复合动作 | `checkpoints/elf3_rl/locomotion_policy/` |
-| `posture_balance_policy` | 单脚、蹲起、踮脚、重心转移动作 | `checkpoints/elf3_rl/posture_balance_policy/` |
-| `upper_body_policy` | 上肢动作、站立上肢组合动作 | `checkpoints/elf3_rl/upper_body_policy/` |
+| `locomotion_policy` | 行走、转弯、侧步、步态复合动作 | `research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/locomotion_policy/` |
+| `posture_balance_policy` | 单脚、蹲起、踮脚、重心转移动作 | `research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/posture_balance_policy/` |
+| `upper_body_policy` | 上肢动作、站立上肢组合动作 | `research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/upper_body_policy/` |
 
 ### 每个 Skill Policy 内部的课程学习
 
@@ -558,7 +558,7 @@ python -m research.retarget_g1_to_elf3.rl.training.train --policy-id upper_body_
 
 # 强制指定某个 Skill Policy 的阶段
 python -m research.retarget_g1_to_elf3.rl.training.train --policy-id locomotion_policy --curriculum-phase 1
-python -m research.retarget_g1_to_elf3.rl.training.train --policy-id locomotion_policy --curriculum-phase 2 --resume checkpoints/elf3_rl/locomotion_policy/phase1_model
+python -m research.retarget_g1_to_elf3.rl.training.train --policy-id locomotion_policy --curriculum-phase 2 --resume research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/locomotion_policy/phase1_model
 ```
 
 ### 监控指标
@@ -588,8 +588,8 @@ python -m research.retarget_g1_to_elf3.rl.training.train --policy-id locomotion_
 ```python
 # 每个 Skill Policy 单独导出策略网络（不含价值网络）
 export_onnx(
-    model_path="checkpoints/elf3_rl/locomotion_policy/final_model",
-    output_path="exports/locomotion_policy.onnx",
+    model_path="research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/locomotion_policy/final_model",
+    output_path="research/retarget_g1_to_elf3/rl/exports/locomotion_policy.onnx",
     obs_dim=586
 )
 ```
@@ -605,8 +605,8 @@ export_onnx(
 ```python
 # 每个 Skill Policy 单独导出网络权重为 NumPy 数组
 export_npz(
-    model_path="checkpoints/elf3_rl/upper_body_policy/final_model",
-    output_path="exports/upper_body_policy_weights.npz"
+    model_path="research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/upper_body_policy/final_model",
+    output_path="research/retarget_g1_to_elf3/rl/exports/upper_body_policy_weights.npz"
 )
 ```
 
@@ -685,16 +685,16 @@ apply_torques(tau)
 ```bash
 # 评估单个 Skill Policy
 python -m research.retarget_g1_to_elf3.rl.eval.evaluate \
-    checkpoints/elf3_rl/locomotion_policy/final_model.zip \
+    research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/locomotion_policy/final_model.zip \
     --policy-id locomotion_policy \
     --eval-set benchmark_eval
 
 # 渲染演示视频
 python -m research.retarget_g1_to_elf3.rl.eval.evaluate \
-    checkpoints/elf3_rl/locomotion_policy/final_model.zip \
+    research/retarget_g1_to_elf3/rl/checkpoints/elf3_rl/locomotion_policy/final_model.zip \
     --policy-id locomotion_policy \
     --eval-set debug_eval \
-    --render demos/elf3_eval.mp4 \
+    --render research/retarget_g1_to_elf3/rl/demos/elf3_eval.mp4 \
     --clip walk_forward
 ```
 
